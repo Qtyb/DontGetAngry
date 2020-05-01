@@ -1,5 +1,6 @@
 import socket
 import sys
+from common import *
 from settings import *
 import select
 
@@ -24,37 +25,6 @@ def is_valid_port(port):
     if 0 < int(port) < 65536:
         return True
     return False
-
-def mysend(sock, msg):
-    msg = msg.encode("utf-8")
-    msg_len = len(msg)
-    totalsent = 0
-    while totalsent < msg_len:
-        sent = sock.send(msg[totalsent:])
-        if sent == 0:   # socket has been closed
-            raise RuntimeError("socket connection broken")
-        totalsent += sent
-
-def myrecv(sock):
-    # msg_type = recvall(sock, TYPE_LEN).decode("utf-8")
-    msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
-    # TODO handle different types of msgs
-    return recvall(sock, msg_len).decode("utf-8")
-
-def recvall(sock, n):
-    """Read n bytes from socket. Returns binary message."""
-    msg = b''
-    while len(msg) < n:
-        try:
-            chunk = sock.recv(n - len(msg))
-        except BlockingIOError:
-            print("BlockingIO Exception")
-            return b""
-        if not chunk:
-            raise EOFError("[ERROR] socket closed while reading data")
-        msg += chunk
-
-    return msg
 
 class DontGetAngryServer:
 
@@ -123,7 +93,7 @@ class DontGetAngryServer:
                     else:
                         # !TODO handle client msg (if msg_type == CREATE_ROOM ...)
                         try:
-                            print("[MSG] From {} : {}".format(str(self.connection_list[sock]), myrecv(sock)))
+                            print("[MSG] From {} : {}".format(str(self.connection_list[sock]), recvText(sock)))
                         except EOFError:
                             self.client_disconnect(sock)
 
@@ -161,11 +131,16 @@ class DontGetAngryServer:
         self.send_welcome_msg(conn)
         # !TODO check for duplicates, maybe create interface class to communicate with client
         # get nickname
-        nickname = myrecv(conn)
+        
+        #nickname = recvText(conn)
+        received_tlv = recvTlv(conn)
+        nickname = remove_tlv_padding(received_tlv[TLV_NICKNAME_TAG])
+        print("Nickname received:", nickname)
+
         cli.set_nickname(nickname)
 
         # get room number from the client
-        rnum = int(myrecv(conn))
+        rnum = int(recvText(conn))
         if rnum in self.rooms.keys():   # room already exists
             self.rooms[rnum].join(cli)
         else:
@@ -176,7 +151,7 @@ class DontGetAngryServer:
         welcome_msg = "***Welcome to the server!***\n" +\
                         self.get_room_information() +\
                         "\nYou can join or create room within the range 0 .. 9"
-        mysend(sock, welcome_msg)  # TODO handle socket broken
+        sendText(sock, welcome_msg)  # TODO handle socket broken
 
     def get_room_information(self):
         """

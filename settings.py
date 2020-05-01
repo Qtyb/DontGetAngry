@@ -12,3 +12,4 @@ INADDR_ANY = ""
 
 TYPE_LEN = 8
 LENGTH_LEN = 10
+

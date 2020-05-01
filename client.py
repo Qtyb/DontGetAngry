@@ -1,21 +1,14 @@
 from socket import socket, AF_INET, SOCK_STREAM
 import time
-from server import myrecv, recvall, mysend
-
-
-def create_msg(msg):
-    data_len = len(msg) if msg is not None else 0
-    header_len = 10
-    header = f"{data_len :< {header_len}}"
-    msg_enc = msg.encode("utf-8")
-    return header + msg
-
+from common import *
+from pytlv.TLV import *
 
 # remote server address
 HOST = '127.0.0.1'
 PORT = 65432
 
 MAXLINE = 1024
+
 
 s = socket(AF_INET, SOCK_STREAM)
 s.connect((HOST, PORT))
@@ -28,7 +21,9 @@ print(str(data.decode("utf-8")))
 
 # set player nickname
 nickname = input("Please set your nickname\n> ")
-mysend(s, create_msg(nickname))
+
+tlv = add_tlv_tag(TLV_NICKNAME_TAG, nickname)
+sendTlv(s, tlv)
 
 # select room or create a new one
 room = -1
@@ -40,13 +35,13 @@ while True:
     except ValueError:
         print("Try again")
 
-mysend(s, create_msg(room))
+sendText(s, create_msg(room))
 
 try:
     while True:
         # read_socket, write_socket,
         msg = input("Enter msg: ")
-        mysend(s, create_msg(msg))
+        sendText(s, create_msg(msg))
 
 except BrokenPipeError as e:
     print("Server error\nClosing...")
@@ -54,3 +49,4 @@ except KeyboardInterrupt:
     print("Closing...")
 finally:
     s.close()
+
