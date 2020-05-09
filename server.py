@@ -3,6 +3,8 @@ import sys
 from common import *
 from settings import *
 import select
+from exceptions import *
+from rooms import RoomManager
 
 
 def is_ipv4(addr):
@@ -13,6 +15,7 @@ def is_ipv4(addr):
         return False
     return True
 
+
 def is_ipv6( addr):
     """ Checks if address is ipv6 """
     try:
@@ -21,10 +24,12 @@ def is_ipv6( addr):
         return False
     return True
 
+
 def is_valid_port(port):
     if 0 < int(port) < 65536:
         return True
     return False
+
 
 class DontGetAngryServer:
 
@@ -32,9 +37,11 @@ class DontGetAngryServer:
         self.HOST = host
         self.PORT = port
         self.connection_list = {}   # all sockets handled by server
-        self.rooms = {}
-        self.nrooms = 0
-        self.next_room_number = 0
+        # self.rooms = {}
+        # self.nrooms = 0
+        self.room_manager = RoomManager()
+        print(id(self.room_manager))
+        # self.next_room_number = 0
         self.init_server()
         self.bind_server()
         self.listen_server()
@@ -56,11 +63,10 @@ class DontGetAngryServer:
         try:
             self.srv_socket = socket.socket(family, socket.SOCK_STREAM)
             self.srv_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.srv_socket.setblocking(0)
+            self.srv_socket.setblocking(False)
         except OSError as e:
-            print(f"[ERROR] Socket cretion error: {srt(e)}")
+            print(f"[ERROR] Socket creation error: {str(e)}")
             sys.exit(1)
-
 
     def bind_server(self):
         """
@@ -84,7 +90,7 @@ class DontGetAngryServer:
             while True:
                 connection_list = list(self.connection_list.keys())
                 # print(connection_list)
-                read_sockets, write_sockets, error_sockets = select.select(connection_list, [], [])
+                read_sockets, write_sockets, error_sockets = select.select(connection_list, [], [])     # !TODO change to poll()
                 # print("READ SOCKETS: ", read_sockets)
                 for sock in read_sockets:
                     if sock is self.srv_socket:
@@ -93,25 +99,20 @@ class DontGetAngryServer:
                     else:
                         # !TODO handle client msg (if msg_type == CREATE_ROOM ...)
                         try:
-                            print("[MSG] From {} : {}".format(str(self.connection_list[sock]), recvText(sock)))
+                            self.connection_list[sock].handle_msg()
+                            # print("AFTER HANDLING MSG: ", self.room_manager)
+                            # print("[MSG] From {} : {}".format(str(self.connection_list[sock]), recvText(sock)))
                         except EOFError:
+                            self.client_disconnect(sock)
+                        except ClearClientException:
+                            print("[ERROR] Received Clear Client Exception")
                             self.client_disconnect(sock)
 
         except KeyboardInterrupt:
             self.close_server()
 
     def client_disconnect(self, sock):
-        print(f"[INFO] Client {self.connection_list[sock]} disconnected")
-        cli = self.connection_list[sock]
-
-        # remove client from rooms he joined
-        for rnum, room in self.rooms.items():
-            if cli in room.get_room_members():
-                room.remove_member(cli)
-                # if room.is_empty():
-                #     print("[INFO] Remove empty room")
-                #     del self.rooms[rnum]
-
+        print(f"[INFO] Client {self.connection_list[sock].cli} disconnected")
         del self.connection_list[sock]
         sock.close()
 
@@ -124,60 +125,18 @@ class DontGetAngryServer:
         sys.exit(1)
 
     def accept_connection(self):
-        conn, addr = self.srv_socket.accept()
-        cli = Client(conn, addr)
-        self.connection_list[conn] = cli
+        csock, addr = self.srv_socket.accept()
+        cli = Client(csock, addr)
+        conn = Connection(cli, csock)
+        self.connection_list[csock] = conn        # change cli -> cli_conn
         print(f"Connection from: {addr}")
-        self.send_welcome_msg(conn)
-        # !TODO check for duplicates, maybe create interface class to communicate with client
-        # get nickname
-        
-        #nickname = recvText(conn)
-        received_tlv = recvTlv(conn)
-        nickname = remove_tlv_padding(received_tlv[TLV_NICKNAME_TAG])
-        print("Nickname received:", nickname)
-
-        cli.set_nickname(nickname)
-
-        # get room number from the client
-        rnum = int(recvText(conn))
-        if rnum in self.rooms.keys():   # room already exists
-            self.rooms[rnum].join(cli)
-        else:
-            self.create_room(rnum)
-            self.rooms[rnum].join(cli)
+        self.send_welcome_msg(csock)
 
     def send_welcome_msg(self, sock):
         welcome_msg = "***Welcome to the server!***\n" +\
-                        self.get_room_information() +\
+                        self.room_manager.get_rooms_description() +\
                         "\nYou can join or create room within the range 0 .. 9"
         sendText(sock, welcome_msg)  # TODO handle socket broken
-
-    def get_room_information(self):
-        """
-        Returns string that decribes number of game rooms and number of players
-        in each room.
-        """
-        msg = "number of rooms created: {}".format(self.nrooms)
-
-        for rnum, room in self.rooms.items():
-            msg += "\n"
-            msg += str(room)
-            msg += "\n"
-
-        return msg
-
-    def create_room(self, rnum):
-        """ Create new room for a game. Returns False if max number of rooms reached """
-        # !TODO MAX ROOM reached handler
-
-        r = Room(rnum)
-        self.rooms[rnum] = r
-        print(f"[INFO] Room {rnum} created!")
-
-    def clear_empty_rooms(self):
-        """ Delete rooms with 0 memebrs """
-        pass
 
 
 class Client:
@@ -186,46 +145,80 @@ class Client:
         self.sd = conn
         self.addr = addr
         self.name = "Unknown"
-        self.rnumber = -1
+        self.rnum = -1
 
     def set_nickname(self, nickname):
         self.name = nickname
 
     def set_rnumber(self, rnum):
-        self.rnumber = rnum
+        self.rnum = rnum
 
     def __str__(self):
-        return self.name + ", " + str(self.addr)
+        return self.name + " " + str(self.addr) + " room: " + str(self.rnum)
 
-class Room:
 
-    def __init__(self, room_number):
+class Connection:
+    """
+    Controls connection state. Created in order to save the state of the initialization process
+    (i.e. first few messages: nickname, join/create room)
+    """
+
+    def __init__(self, cli, cli_sock):
         """"""
-        self.rnumber = room_number
-        self.room_members = []
+        self.cli = cli
+        self.sock = cli_sock
+        self.room_manager = RoomManager()       # singleton
+        self.state = INIT
 
-    def join(self, cli):
-        self.room_members.append(cli)
-        cli.set_rnumber(self.rnumber)
-        print(f"Client {str(cli)} has joined room nr {self.rnumber}")
+    def handle_msg(self):
+        print("[DEBUG] state: {}".format(self.state))
+        if self.state == INIT:
+            if not self.recv_nickname():
+                raise ClearClientException()
 
-    def remove_member(self, cli):
-        self.room_members.remove(cli)
+        elif self.state == NICKNAME_RECEIVED:
+            if not self.recv_room():
+                raise ClearClientException()
 
-    def get_room_members(self):
-        return self.room_members
+        elif self.state == ROOM_JOINED:
+            if not self.recv_msg():
+                raise ClearClientException()
+        else:
+            self.recv_err()
 
-    def is_empty(self):
-        if not len(self):
+    def recv_nickname(self):
+        received_tlv = recvTlv(self.sock)
+        nickname = remove_tlv_padding(received_tlv[TLV_NICKNAME_TAG])
+        print("[INFO] Nickname received:", nickname)
+        self.cli.set_nickname(nickname)
+        self.state = NICKNAME_RECEIVED
+        return True
+
+    def recv_room(self):
+        """
+        Try to join or create an room. Returns msg that should be send to the client.
+        :return:    (str)   : msg that describe if operation was successful
+        """
+        rnum = int(recvText(self.sock))
+        if self.room_manager.join_client(self.cli, rnum):
+            # print("[RECV_ROOM]", self.room_manager.get_rooms_description())
+            self.state = ROOM_JOINED
+            # return "You have joined room nr {} ".format(rnum)       # !TODO enum class with all of the messages
             return True
-        return False
+        else:
+            # return "Error occurs while joining the room number {}. Try again".format(rnum)
+            return False
 
-    def __len__(self):
-        return len(self.room_members)
+    def recv_msg(self):
+        msg = recvText(self.sock)
+        if not msg: # client closed connection
+            self.room_manager.disconnect_client(self.cli)
+            return False
+        print("[MSG] From {} : {}".format(str(self.cli), msg))
+        return True
 
-    def __str__(self):
-        return "Room {}: {} / {} clients".format(self.rnumber, len(self), MAX_CLIENTS_PER_ROOM)
-
+    def recv_err(self):
+        pass
 
 
 if __name__ == "__main__":

@@ -20,7 +20,12 @@ if not data:
 print(str(data.decode("utf-8")))
 
 # set player nickname
-nickname = input("Please set your nickname\n> ")
+while True:
+    nickname = input("Please set your nickname\n> ")
+    print("NICK:", nickname)
+    if nickname:
+        break
+    print("Try again")
 
 tlv = add_tlv_tag(TLV_NICKNAME_TAG, nickname)
 sendTlv(s, tlv)

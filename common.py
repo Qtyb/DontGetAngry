@@ -26,7 +26,7 @@ def sendText(sock, msg):
 
 
 def recvall(sock, n):
-    """Read n bytes from socket. Returns binary message."""
+    """Read n bytes from socket. Returns binary message. Raise EOFError if socket has been closed"""
     msg = b''
     while len(msg) < n:
         try:
@@ -42,9 +42,13 @@ def recvall(sock, n):
 
 def recvText(sock):
     # msg_type = recvall(sock, TYPE_LEN).decode("utf-8")
-    msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
     # TODO handle different types of msgs
-    return recvall(sock, msg_len).decode("utf-8")
+    try:
+        msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
+        return recvall(sock, msg_len).decode("utf-8")
+    except EOFError:
+        print("[WARNING] Client closed connection")
+
 
 # TLV functions
 def create_tlv():
@@ -83,15 +87,18 @@ def sendTlv(sock, tlv):
 
     sendText(sock, create_msg(message_to_send))  
 
-def recvTlv(sock):
+def recvTlv(sock):      # !TODO handle EOFError
     msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
-    msg = recvall(sock, msg_len).decode("utf-8")
+    try:
+        msg = recvall(sock, msg_len).decode("utf-8")
+        tlv = create_tlv()
+        parsed_msg = tlv.parse(msg)
+        print("parsed recvTLV: ", parsed_msg)
+        return parsed_msg
+    except EOFError:
+        print("[WARNING] Client has closed connection")
 
-    tlv = create_tlv()
-    parsed_msg = tlv.parse(msg)
-    print("parsed recvTLV: ", parsed_msg)
 
-    return parsed_msg  
 
 # TLV functions
 
