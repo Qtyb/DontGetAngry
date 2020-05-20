@@ -31,12 +31,14 @@ def is_valid_port(port):
     return False
 
 
+connection_list = {}   # all sockets handled by server
+
+
 class DontGetAngryServer:
 
     def __init__(self, host, port):
         self.HOST = host
         self.PORT = port
-        self.connection_list = {}   # all sockets handled by server
         # self.rooms = {}
         # self.nrooms = 0
         self.room_manager = RoomManager()
@@ -75,7 +77,7 @@ class DontGetAngryServer:
         """
         try:
             self.srv_socket.bind((self.HOST, self.PORT))
-            self.connection_list[self.srv_socket] = SERVER_FLAG
+            connection_list[self.srv_socket] = SERVER_FLAG
         except OSError as e:
             print(f"[ERROR] Bind socket error: {str(e)}")
             self.close_server()
@@ -86,40 +88,43 @@ class DontGetAngryServer:
         print(f"Listinig on {sockinfo} ...")
 
     def run(self):
+
         try:
             while True:
-                connection_list = list(self.connection_list.keys())
                 # print(connection_list)
-                read_sockets, write_sockets, error_sockets = select.select(connection_list, [], [])     # !TODO change to poll()
+                read_sockets, _, _ = select.select(list(connection_list.keys()), [], [])     # !TODO change to poll()
                 # print("READ SOCKETS: ", read_sockets)
                 for sock in read_sockets:
                     if sock is self.srv_socket:
                         # accept new connection
                         self.accept_connection()
                     else:
-                        # !TODO handle client msg (if msg_type == CREATE_ROOM ...)
                         try:
-                            self.connection_list[sock].handle_msg()
+                            connection_list[sock].handle_msg2()
                             # print("AFTER HANDLING MSG: ", self.room_manager)
                             # print("[MSG] From {} : {}".format(str(self.connection_list[sock]), recvText(sock)))
-                        except EOFError:
+                        except (EOFError, OSError, ClearClientException) as e:
+                            print("[ERROR] Error while handling message: ", str(e))
                             self.client_disconnect(sock)
-                        except ClearClientException:
+                        except ValueError as e:
+                            print("[ERROR] Unknown tag received")
+                        except UnsubscribeException:
                             print("[ERROR] Received Clear Client Exception")
-                            self.client_disconnect(sock)
+                            unsubscribe_client(sock)
 
         except KeyboardInterrupt:
             self.close_server()
 
     def client_disconnect(self, sock):
-        print(f"[INFO] Client {self.connection_list[sock].cli} disconnected")
-        del self.connection_list[sock]
+        print(f"[INFO] Client {connection_list[sock].cli} disconnected")
+        self.room_manager.disconnect_client(connection_list[sock])
+        del connection_list[sock]
         sock.close()
 
     def close_server(self):
         """ Close all open sockets """
         print("Clossing...")
-        for sock in self.connection_list.keys():
+        for sock in connection_list.keys():
             sock.close()
         # self.srv_socket.close()
         sys.exit(1)
@@ -128,15 +133,19 @@ class DontGetAngryServer:
         csock, addr = self.srv_socket.accept()
         cli = Client(csock, addr)
         conn = Connection(cli, csock)
-        self.connection_list[csock] = conn        # change cli -> cli_conn
+        connection_list[csock] = conn        # change cli -> cli_conn
         print(f"Connection from: {addr}")
-        self.send_welcome_msg(csock)
+        # self.send_welcome_msg(csock)
 
     def send_welcome_msg(self, sock):
         welcome_msg = "***Welcome to the server!***\n" +\
                         self.room_manager.get_rooms_description() +\
                         "\nYou can join or create room within the range 0 .. 9"
         sendText(sock, welcome_msg)  # TODO handle socket broken
+
+
+def unsubscribe_client(sock):
+    del connection_list[sock]
 
 
 class Client:
@@ -164,61 +173,93 @@ class Connection:
     """
 
     def __init__(self, cli, cli_sock):
-        """"""
         self.cli = cli
         self.sock = cli_sock
         self.room_manager = RoomManager()       # singleton
         self.state = INIT
+        self.received_tlv = None
+        self.msg_handlers = {
+            TLV_NICKNAME_TAG: self.recv_nickname,
+            TLV_ROOM_TAG: self.recv_room,
+            TLV_GET_ROOMS: self.send_room_info,
+            TLV_START_MSG: self.recv_start,
+            TLV_ROLLDICE_TAG: self.recv_roll
+        }
 
-    def handle_msg(self):
-        print("[DEBUG] state: {}".format(self.state))
-        if self.state == INIT:
-            if not self.recv_nickname():
-                raise ClearClientException()
-
-        elif self.state == NICKNAME_RECEIVED:
-            if not self.recv_room():
-                raise ClearClientException()
-
-        elif self.state == ROOM_JOINED:
-            if not self.recv_msg():
-                raise ClearClientException()
-        else:
-            self.recv_err()
+    def handle_msg2(self):
+        self.received_tlv = recvTlv(self.sock)
+        print(self.received_tlv)
+        msg_types = get_types(self.received_tlv)
+        for type in msg_types:
+            try:
+                self.msg_handlers[type]()
+            except KeyError as e:
+                print("[ERROR] cannot parse {}: {}".format(type, e))
 
     def recv_nickname(self):
-        received_tlv = recvTlv(self.sock)
-        nickname = remove_tlv_padding(received_tlv[TLV_NICKNAME_TAG])
+        """Receive nickname from client, raise OSError if error occurs"""
+        nickname = remove_tlv_padding(self.received_tlv[TLV_NICKNAME_TAG])
         print("[INFO] Nickname received:", nickname)
         self.cli.set_nickname(nickname)
-        self.state = NICKNAME_RECEIVED
-        return True
+        self.snd_notification(TLV_OK_TAG, self.get_welcome_message())
 
     def recv_room(self):
         """
         Try to join or create an room. Returns msg that should be send to the client.
         :return:    (str)   : msg that describe if operation was successful
         """
-        rnum = int(recvText(self.sock))
-        if self.room_manager.join_client(self.cli, rnum):
-            # print("[RECV_ROOM]", self.room_manager.get_rooms_description())
-            self.state = ROOM_JOINED
-            # return "You have joined room nr {} ".format(rnum)       # !TODO enum class with all of the messages
-            return True
+        rnum = remove_tlv_padding(self.received_tlv[TLV_ROOM_TAG])
+        try:
+            rnum = int(rnum)
+        except ValueError:
+            print("[ERROR] Wrong room number: {}".format(rnum))
+            self.snd_notification(TLV_FAIL_TAG)
+            return
+
+        if self.room_manager.join_client(self, rnum):
+            self.snd_notification(TLV_OK_TAG, "You have joined room {}".format(rnum))
         else:
-            # return "Error occurs while joining the room number {}. Try again".format(rnum)
-            return False
+            self.snd_notification(TLV_FAIL_TAG, "Error while joining the room {}".format(rnum))
 
     def recv_msg(self):
+        """ Receive text message from a client """
         msg = recvText(self.sock)
-        if not msg: # client closed connection
-            self.room_manager.disconnect_client(self.cli)
-            return False
+        if not msg:     # client closed connection
+            self.room_manager.disconnect_client(self)
+            raise ClearClientException()
         print("[MSG] From {} : {}".format(str(self.cli), msg))
-        return True
+        return msg
+
+    def recv_start(self):
+        room = self.room_manager.rooms[self.cli.rnum]
+        if not room.start_game():
+            self.snd_notification(TLV_INFO_TAG, "SERVER: Cannot start a game\n")
+            return
+        # !TODO check for bug when client is handled by a thread and server has not unsubribed yet
+        for conn in room.room_members:
+            print(f"[INFO] Client {str(conn.cli)} unsubscribed")
+            unsubscribe_client(conn.sock)
+
+    def recv_roll(self):    # !TODO connection reset handling
+        """Can raise ValueError"""
+        roll = remove_tlv_padding(self.received_tlv[TLV_ROLLDICE_TAG])
+        return int(roll)
 
     def recv_err(self):
         pass
+
+    def snd_notification(self, flag, msg=""):       # handle OSError on higher level!
+        """Send message that contains control message"""
+        tlv = add_tlv_tag(flag, msg)
+        sendTlv(self.sock, tlv)
+
+    def send_room_info(self):
+        tlv = add_tlv_tag(TLV_INFO_TAG, self.room_manager.get_rooms_description())
+        sendTlv(self.sock, tlv)
+
+    def get_welcome_message(self):
+        msg = "\n****Welcome, you have connected to the server****\n" + self.room_manager.get_rooms_description()
+        return msg
 
 
 if __name__ == "__main__":

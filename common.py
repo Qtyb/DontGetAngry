@@ -3,7 +3,21 @@ from pytlv.TLV import *
 
 # TLV
 TLV_NICKNAME_TAG = '0001'
-TLV_TAGS = [TLV_NICKNAME_TAG]
+TLV_ROOM_TAG = '0002'
+
+# notifications
+TLV_OK_TAG = '1111'
+TLV_FAIL_TAG = '1112'
+
+TLV_INFO_TAG = '0100'   # msg to print
+TLV_GET_ROOMS = '3000'
+
+TLV_START_MSG = '5000'
+TLV_STARTED_TAG = '5001'
+TLV_ROLLDICE_TAG = '5010'
+TLV_TAGS = [TLV_NICKNAME_TAG, TLV_ROOM_TAG, TLV_ROLLDICE_TAG, TLV_INFO_TAG, TLV_OK_TAG, TLV_FAIL_TAG,
+            TLV_GET_ROOMS, TLV_START_MSG, TLV_STARTED_TAG]
+
 # TLV END
 
 def create_msg(msg):
@@ -35,7 +49,7 @@ def recvall(sock, n):
             print("BlockingIO Exception")
             return b""
         if not chunk:
-            raise EOFError("[ERROR] socket closed while reading data")
+            raise EOFError("socket closed while reading data")
         msg += chunk
 
     return msg
@@ -43,11 +57,11 @@ def recvall(sock, n):
 def recvText(sock):
     # msg_type = recvall(sock, TYPE_LEN).decode("utf-8")
     # TODO handle different types of msgs
-    try:
-        msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
-        return recvall(sock, msg_len).decode("utf-8")
-    except EOFError:
-        print("[WARNING] Client closed connection")
+    # try:
+    msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
+    return recvall(sock, msg_len).decode("utf-8")
+    # except EOFError:
+    #     print("[WARNING] Client closed connection")
 
 
 # TLV functions
@@ -89,17 +103,20 @@ def sendTlv(sock, tlv):
 
 def recvTlv(sock):      # !TODO handle EOFError
     msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
-    try:
-        msg = recvall(sock, msg_len).decode("utf-8")
-        tlv = create_tlv()
-        parsed_msg = tlv.parse(msg)
-        print("parsed recvTLV: ", parsed_msg)
-        return parsed_msg
-    except EOFError:
-        print("[WARNING] Client has closed connection")
+    msg = recvall(sock, msg_len).decode("utf-8")
+    tlv = create_tlv()
+    # print("rcv msg: ", msg)
+    parsed_msg = tlv.parse(msg)
+    # print("parsed recvTLV: ", parsed_msg)
+    return parsed_msg
+
+def get_types(tlv_msg):
+    """Return list of tlv message tags"""
+    return list(tlv_msg.keys())
 
 
-
+def is_ok_answer(ans):
+    return True if TLV_OK_TAG in ans else False
 # TLV functions
 
 
