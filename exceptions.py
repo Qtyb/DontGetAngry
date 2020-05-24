@@ -15,3 +15,13 @@ class WrongRNumException(Error):
 class ClearClientException(Error):
     """ Called to inform that client disconnected and server should remove connection from database """
     pass
+
+
+class YouAreAloneException(Error):  # !TODO change name
+    pass
+
+class UnsubscribeException(Error):
+    pass
+
+class ChangeStateException(Error):
+    pass

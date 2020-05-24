@@ -1,13 +1,17 @@
 from settings import *
 from exceptions import *
+from threading_game import GameThread
+
 
 class Room:
 
     def __init__(self, rnum):
         self.rnum = rnum
-        self.room_members = []
+        self.room_members = []      # <Connection>
+        self.game = None            # game instance
+        self.lock = False
 
-    def join(self, cli):        # CHANGE: raise Exception if room is full (previous: no check)
+    def join(self, conn):        # CHANGE: raise Exception if room is full (previous: no check)
         """
         Add client to the room members list. Raise exception fi room is full.
         :param cli:     (Client)    : client
@@ -16,16 +20,16 @@ class Room:
         if len(self) >= MAX_CLIENTS_PER_ROOM:
             raise MaxReachedException()
 
-        self.room_members.append(cli)
-        cli.set_rnumber(self.rnum)
-        print(f"[INFO] Client joined room: {str(cli)}")
+        self.room_members.append(conn)
+        conn.cli.set_rnumber(self.rnum)
+        print(f"[INFO] Client joined room: {str(conn.cli)}")
 
-    def remove(self, cli):
+    def remove(self, conn):
         """  Tries to remove client from room """
         try:
-            self.room_members.remove(cli)
+            self.room_members.remove(conn)
         except ValueError:
-            print("[WARNING] Client {} is not connected to the room nr: {}".format(str(cli), self.rnum))
+            print("[WARNING] Client {} is not connected to the room nr: {}".format(str(conn.cli), self.rnum))
 
     def get_room_members(self):
         """ Returns list of room members """
@@ -35,6 +39,21 @@ class Room:
         if not len(self):
             return True
         return False
+
+    def start_game(self):
+        if self.game is not None:
+            print("[WARNING] Game already running")
+            return False
+
+        if len(self) < 2:
+            print("[WARNING] Cannot create a game, need 2 or more players")
+            return False
+
+        print("[INFO] Starting game...")
+
+        game = GameThread(self.room_members, self.rnum)    # !TODO player number exception
+        game.start()
+        return True
 
     def __len__(self):
         return len(self.room_members)
@@ -50,21 +69,21 @@ class RoomManager:
         def __init__(self):     # init() is not a constructor
             self.rooms = {}     # rnum: Room
 
-        def join_client(self, cli, rnum):
+        def join_client(self, conn, rnum):
             """
             Handles both changing the room or creating a new one. Client that want to join/create a room should call it.
-            :param cli:         (Client)    : client that wants to join/create room
-            :param rnum:        (int)       : number of room
-            :return:            (bool)      : True if operation was successful
+            :param conn:        (Connection)    : client connection with the server
+            :param rnum:        (int)           : number of room
+            :return:            (bool)          : True if operation was successful
             """
             # check if client had joined any room before
-            if cli.rnum > 0:
-                self.rooms[cli.rnum].remove(cli)
+            if conn.cli.rnum > 0:
+                self.rooms[conn.cli.rnum].remove(conn)
 
             # check if room exists
             if rnum in self.rooms.keys():
                 try:
-                    self.rooms[rnum].join(cli)
+                    self.rooms[rnum].join(conn)      # change cli -> conn
                     return True
                 except MaxReachedException:
                     print("[ROOM MANAGER] Room {} is full".format(rnum))
@@ -72,14 +91,14 @@ class RoomManager:
 
             # if room of number rnum doesn't exist create a new one
             else:
-                self.create_room(cli, rnum)     # join call create
+                self.create_room(conn, rnum)     # join call create
                 return True
 
-        def create_room(self, cli, rnum):
+        def create_room(self, conn, rnum):
             """
             Try to create a room. If max number of rooms reached than raise an Exception.
             If room already exist, return False
-            :param cli:     (Client)    : client
+            :param conn:     (Connection)    : client connection
             :param rnum:    (int)       : room number
             :return:        (bool)      : True if creation was successful
             """
@@ -92,28 +111,31 @@ class RoomManager:
                 return False
 
             room = Room(rnum)
-            room.join(cli)
+            room.join(conn)
             self.rooms[rnum] = room
 
         def close_room(self, rnum):
-            if rnum not in self.rooms.values():
+            if rnum not in self.rooms.keys():
                 raise WrongRNumException()
-
-            room = self.rooms[rnum]
-            if not room.is_empty():     # !TODO disconnect all clients and close room
-                print("[WARNING] Cannot close room if clients are connected")
 
             del self.rooms[rnum]
 
-        def disconnect_client(self, cli):
-            self.rooms[cli.rnum].remove(cli)
+        def disconnect_client(self, conn):
+            try:
+                print("[ROOM MANAGER] Disconnect connection")
+                self.rooms[conn.cli.rnum].remove(conn)
+                if self.rooms[conn.cli.rnum].is_empty():
+                    print("[INFO] Close room {}".format(conn.cli.rnum))
+                    del self.rooms[conn.cli.rnum]
+            except KeyError:
+                pass
 
         def get_all_cli_joined(self):
             """
             Get list of all the clients that joined room.
             :return:    (list)  : list of Client(s)
             """
-            clients = [member for room in self.rooms.values() for member in room]
+            clients = [conn.cli for room in self.rooms.values() for conn in room]
             return clients
 
         def get_rooms_description(self):
@@ -137,7 +159,6 @@ class RoomManager:
         def __str__(self):
             return self.get_rooms_description()
 
-    # Singleton pattern
     instance = None
 
     def __new__(cls):  # constructor
