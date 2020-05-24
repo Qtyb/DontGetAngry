@@ -1,4 +1,5 @@
-from logger_conf import logger
+from logger_conf import logger, reveal_name
+from figure import Figure
 
 
 class Board:
@@ -33,3 +34,21 @@ class Board:
             # increase start index for next player to register
             self.next_start_index += int(self.field_amount / self.player_amount)
             logger.info("registered player {}".format(player.id))
+
+    def display_board(self):
+        board = ""
+        for p in self.players:
+            board += "Board: "
+            i = 0
+            for f in self.fields:
+                if isinstance(f, Figure):
+                    f = f.name
+                board += "|{}".format(f)
+                i += 1
+
+            board += "|\n"
+
+        return board
+
+
+
