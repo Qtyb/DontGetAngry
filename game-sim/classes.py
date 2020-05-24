@@ -86,15 +86,6 @@ class Player:
             self.start_figures.append(figure)
             self.figures.append(figure)
 
-    def roll(self):
-        """
-        method to roll the dice, returns the dice eye
-        """
-        self.roll_turns += 1
-        dice_eye = random.randint(1, 6)
-
-        return dice_eye
-
     def has_figures_on_board(self, board):
         """
         method to check if player has figures on the board, returns boolean
