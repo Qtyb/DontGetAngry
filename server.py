@@ -5,6 +5,7 @@ from settings import *
 import select
 from exceptions import *
 from rooms import RoomManager
+from game.logger_conf import server_logger
 
 
 def is_ipv4(addr):
@@ -39,11 +40,7 @@ class DontGetAngryServer:
     def __init__(self, host, port):
         self.HOST = host
         self.PORT = port
-        # self.rooms = {}
-        # self.nrooms = 0
         self.room_manager = RoomManager()
-        print(id(self.room_manager))
-        # self.next_room_number = 0
         self.init_server()
         self.bind_server()
         self.listen_server()
@@ -59,7 +56,7 @@ class DontGetAngryServer:
         elif is_ipv6(self.HOST):
             family = socket.AF_INET6
         else:
-            print(f"[ERROR] Wrong host address {self.HOST}")
+            server_logger.error(f"Wrong host address {self.HOST}")
             sys.exit(1)
 
         try:
@@ -67,7 +64,7 @@ class DontGetAngryServer:
             self.srv_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.srv_socket.setblocking(False)
         except OSError as e:
-            print(f"[ERROR] Socket creation error: {str(e)}")
+            server_logger.error(f"Socket creation error: {str(e)}")
             sys.exit(1)
 
     def bind_server(self):
@@ -79,13 +76,13 @@ class DontGetAngryServer:
             self.srv_socket.bind((self.HOST, self.PORT))
             connection_list[self.srv_socket] = SERVER_FLAG
         except OSError as e:
-            print(f"[ERROR] Bind socket error: {str(e)}")
+            server_logger.error(f"Bind socket error: {str(e)}")
             self.close_server()
 
     def listen_server(self):
         self.srv_socket.listen(BACKLOG)
         sockinfo = self.srv_socket.getsockname()
-        print(f"Listinig on {sockinfo} ...")
+        server_logger.info(f"Listinig on {sockinfo} ...")
 
     def run(self):
 
@@ -104,38 +101,38 @@ class DontGetAngryServer:
                             # print("AFTER HANDLING MSG: ", self.room_manager)
                             # print("[MSG] From {} : {}".format(str(self.connection_list[sock]), recvText(sock)))
                         except (EOFError, OSError, ClearClientException) as e:
-                            print("[ERROR] Error while handling message: ", str(e))
+                            server_logger.error(f"Error while handling message: {str(e)}")
                             self.client_disconnect(sock)
                         except ValueError as e:
-                            print("[ERROR] Unknown tag received")
+                            server_logger.error(f"Unknown tag received")
                         except UnsubscribeException:
-                            print("[ERROR] Received Clear Client Exception")
+                            server_logger.debug(f"Received Clear Client Exception")
                             unsubscribe_client(sock)
 
         except KeyboardInterrupt:
             self.close_server()
 
     def client_disconnect(self, sock):
-        print(f"[INFO] Client {connection_list[sock].cli} disconnected")
+        server_logger.info(f"Client {connection_list[sock].cli} disconnected")
         self.room_manager.disconnect_client(connection_list[sock])
         del connection_list[sock]
         sock.close()
 
     def close_server(self):
         """ Close all open sockets """
-        print("Clossing...")
+        server_logger.info("Closing...")
         for sock in connection_list.keys():
             sock.close()
         # self.srv_socket.close()
         sys.exit(1)
 
     def accept_connection(self):
+        """ Accept new connection. Create new Connection and add it to connection list."""
         csock, addr = self.srv_socket.accept()
         cli = Client(csock, addr)
         conn = Connection(cli, csock)
         connection_list[csock] = conn        # change cli -> cli_conn
-        print(f"Connection from: {addr}")
-        # self.send_welcome_msg(csock)
+        server_logger.info(f"Connection from: {addr}")
 
     def send_welcome_msg(self, sock):
         welcome_msg = "***Welcome to the server!***\n" +\
@@ -145,6 +142,7 @@ class DontGetAngryServer:
 
 
 def unsubscribe_client(sock):
+    """ Remove sock descriptor from connection list. Select will not be longer waiting for the events on that socket """
     del connection_list[sock]
 
 
@@ -168,8 +166,7 @@ class Client:
 
 class Connection:
     """
-    Controls connection state. Created in order to save the state of the initialization process
-    (i.e. first few messages: nickname, join/create room)
+    Represents connection between server and client. Handles communication between server and client.
     """
 
     def __init__(self, cli, cli_sock):
@@ -187,19 +184,21 @@ class Connection:
         }
 
     def handle_msg2(self):
+        """Reads next TTL message from the socket and saves TTL value that indicate type of message to
+        internal variable. Next it calls handler for every TLL in message in order to handle the messages"""
         self.received_tlv = recvTlv(self.sock)
-        print(self.received_tlv)
+        server_logger.debug(f"Received TTL: {self.received_tlv}")
         msg_types = get_types(self.received_tlv)
         for type in msg_types:
             try:
                 self.msg_handlers[type]()
             except KeyError as e:
-                print("[ERROR] cannot parse {}: {}".format(type, e))
+                server_logger.error("Cannot parse {}: {}".format(type, e))
 
     def recv_nickname(self):
         """Receive nickname from client, raise OSError if error occurs"""
         nickname = remove_tlv_padding(self.received_tlv[TLV_NICKNAME_TAG])
-        print("[INFO] Nickname received:", nickname)
+        server_logger.debug("Nickname received:", nickname)
         self.cli.set_nickname(nickname)
         self.snd_notification(TLV_OK_TAG, self.get_welcome_message())
 
@@ -212,7 +211,7 @@ class Connection:
         try:
             rnum = int(rnum)
         except ValueError:
-            print("[ERROR] Wrong room number: {}".format(rnum))
+            server_logger.warning("Wrong room number: {}".format(rnum))
             self.snd_notification(TLV_FAIL_TAG)
             return
 
@@ -227,7 +226,7 @@ class Connection:
         if not msg:     # client closed connection
             self.room_manager.disconnect_client(self)
             raise ClearClientException()
-        print("[MSG] From {} : {}".format(str(self.cli), msg))
+        server_logger.debug("Msg from {} : {}".format(str(self.cli), msg))
         return msg
 
     def recv_start(self):
@@ -235,18 +234,15 @@ class Connection:
         if not room.start_game():
             self.snd_notification(TLV_INFO_TAG, "SERVER: Cannot start a game\n")
             return
-        # !TODO check for bug when client is handled by a thread and server has not unsubribed yet
+
         for conn in room.room_members:
-            print(f"[INFO] Client {str(conn.cli)} unsubscribed")
+            server_logger.info(f"Client {str(conn.cli)} unsubscribed")
             unsubscribe_client(conn.sock)
 
     def recv_roll(self):    # !TODO connection reset handling
         """Can raise ValueError"""
         roll = remove_tlv_padding(self.received_tlv[TLV_ROLLDICE_TAG])
         return int(roll)
-
-    def recv_err(self):
-        pass
 
     def snd_notification(self, flag, msg=""):       # handle OSError on higher level!
         """Send message that contains control message"""
@@ -274,7 +270,7 @@ if __name__ == "__main__":
         port = sys.argv[2]
 
         if not is_valid_port(port):
-            print(f"[ERROR] Wrong port: {port}")
+            server_logger.error(f"Wrong port: {port}")
             sys.exit(1)
         port = int(port)
 
