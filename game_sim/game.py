@@ -1,6 +1,7 @@
 import random
-from classes import Board, Player
-from logger_conf import logger, reveal_name
+from game_sim.classes import Board, Player
+from game_sim.logger_conf import logger, reveal_name
+
 
 class Game:
 

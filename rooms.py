@@ -1,6 +1,7 @@
 from settings import *
 from exceptions import *
 from threading_game import GameThread
+from game.logger_conf import server_logger
 
 
 class Room:
@@ -22,14 +23,14 @@ class Room:
 
         self.room_members.append(conn)
         conn.cli.set_rnumber(self.rnum)
-        print(f"[INFO] Client joined room: {str(conn.cli)}")
+        server_logger.info(f"Client joined room: {str(conn.cli)}")
 
     def remove(self, conn):
         """  Tries to remove client from room """
         try:
             self.room_members.remove(conn)
         except ValueError:
-            print("[WARNING] Client {} is not connected to the room nr: {}".format(str(conn.cli), self.rnum))
+            server_logger.warning("Client {} is not connected to the room nr: {}".format(str(conn.cli), self.rnum))
 
     def get_room_members(self):
         """ Returns list of room members """
@@ -42,14 +43,14 @@ class Room:
 
     def start_game(self):
         if self.game is not None:
-            print("[WARNING] Game already running")
+            server_logger.warning("Game already running")
             return False
 
         if len(self) < 2:
-            print("[WARNING] Cannot create a game, need 2 or more players")
+            server_logger.warning("Cannot create a game, need 2 or more players")
             return False
 
-        print("[INFO] Starting game...")
+        server_logger.info("Starting game...")
 
         game = GameThread(self.room_members, self.rnum)    # !TODO player number exception
         game.start()
@@ -86,7 +87,7 @@ class RoomManager:
                     self.rooms[rnum].join(conn)      # change cli -> conn
                     return True
                 except MaxReachedException:
-                    print("[ROOM MANAGER] Room {} is full".format(rnum))
+                    server_logger.info("Room {} is full".format(rnum))
                     return False
 
             # if room of number rnum doesn't exist create a new one
@@ -106,7 +107,7 @@ class RoomManager:
                 raise MaxReachedException()
 
             if rnum in self.rooms.keys():
-                print("[WARNING] Room of the number {} already exists.".format(rnum))
+                server_logger.warning("Room of the number {} already exists.".format(rnum))
                 # self.join_client(cli, rnum)
                 return False
 
@@ -122,10 +123,10 @@ class RoomManager:
 
         def disconnect_client(self, conn):
             try:
-                print("[ROOM MANAGER] Disconnect connection")
+                server_logger.debug("RM: Disconnect connection")
                 self.rooms[conn.cli.rnum].remove(conn)
                 if self.rooms[conn.cli.rnum].is_empty():
-                    print("[INFO] Close room {}".format(conn.cli.rnum))
+                    server_logger.info("Close room {}".format(conn.cli.rnum))
                     del self.rooms[conn.cli.rnum]
             except KeyError:
                 pass

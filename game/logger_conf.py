@@ -4,8 +4,8 @@ from logging.handlers import TimedRotatingFileHandler
 
 
 FORMATTER = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
-LOG_FILE = "game.log"
-
+LOG_FILE = "log_files/game.log"
+SERVER_LOG_FILE = "log_files/server.log"
 
 def get_console_handler():
     console_handler = logging.StreamHandler(sys.stdout)
@@ -28,6 +28,18 @@ def get_logger(logger_name):
     return logger
 
 
+def setup_logger(logger_name, log_file, level=logging.INFO):
+    handler = logging.FileHandler(log_file)
+    handler.setFormatter(FORMATTER)
+
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(level)
+    logger.addHandler(handler)
+    logger.addHandler(get_console_handler())
+
+    return logger
+
+
 # function to reveal player name on game board, used for logging
 def reveal_name(list):
     new_list = []
@@ -40,3 +52,4 @@ def reveal_name(list):
 
 
 logger = get_logger("game")
+server_logger = setup_logger("server", SERVER_LOG_FILE, level=logging.DEBUG)

@@ -198,7 +198,7 @@ class Connection:
     def recv_nickname(self):
         """Receive nickname from client, raise OSError if error occurs"""
         nickname = remove_tlv_padding(self.received_tlv[TLV_NICKNAME_TAG])
-        server_logger.debug("Nickname received:", nickname)
+        server_logger.debug(f"Nickname received: {nickname}")
         self.cli.set_nickname(nickname)
         self.snd_notification(TLV_OK_TAG, self.get_welcome_message())
 
