@@ -1,7 +1,10 @@
 import threading
+import select
 from settings import *
 from common import *
-import select
+from game.game import Game
+from game.logger_conf import logger, reveal_name
+
 
 NROLLS = 3
 
@@ -19,16 +22,53 @@ class GameThread(threading.Thread):
         self.received_tlv = None
         self.send_game_started()
         self.msg_handlers = {
-            TLV_ROLLDICE_TAG: self.rcv_rol_dice
+            TLV_ROLLDICE_TAG: self.rcv_rol_dice,
+            TLV_CONTINUE_TAG: self.rcv_continue,
+            TLV_PLACEFIGURE_TAG: self.rcv_place_figure,
+            TLV_MOVEFIGURE_TAG: self.rcv_move_figure
         }
         self.next_player = 0
+        self.game = Game(self.nplayers, 24) #Board should scale but will not, because it is waste of time ;)
 
     def run(self):
         try:
             self.running = True
             self.snd_msg_to_all(self.get_game_status())
+            self.game.start_game()
             # self.create()
             while self.running:
+                for player in self.game.players:
+                    self.game.start_player_turn(player)
+                    if player.has_figures_on_board(self.game.game_board):
+                        
+                        roll = self.game.roll_d6()
+                        if roll == 6 and len(player.start_figures) != 0:
+                            ### PLAYER CAN DECIDE HERE
+                            player_wants_moving = True
+                            if player_wants_moving:
+                                player.move_figure(self.game.game_board, roll)
+                            else:
+                                player.place_figure(self.game.game_board)
+                        
+                        else:
+                            player.move_figure(self.game.game_board, roll)
+
+                    # player has no figure on board
+                    else:
+                        # three chances to roll a 6
+                        for i in range(3):
+                            if self.game.try_place_figure(player):
+                                break
+                            
+                if(self.game.is_player_winner(player)):
+                    logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
+                    break
+
+                logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
+                    reveal_name(player.start_figures), reveal_name(player.finished_figures)))
+                # debug output of board fields
+                logger.debug("Board fields after turn: {}".format(reveal_name(self.game.game_board.fields)))
+
                 # print(self.connections)
                 connection_list = [conn.sock for conn in self.connections]
                 # print(connection_list)
@@ -36,6 +76,7 @@ class GameThread(threading.Thread):
 
                 for sock in read_sockets:
                     self.handle_msg(sock)
+
         except (EOFError, OSError) as e:
             print("[ERROR-GAME] Error while handling message: ", str(e))
             self.close_all()
@@ -43,6 +84,14 @@ class GameThread(threading.Thread):
         except ValueError as e:
             print("[ERROR] Unknown tag received")
 
+    def rcv_continue(self):
+        print("continue received")
+
+    def rcv_place_figure(self):
+        print("place figure received")
+
+    def rcv_move_figure(self):
+        print("move figure received")
 
     def rcv_rol_dice(self):
         roll = int(self.received_tlv[TLV_ROLLDICE_TAG])

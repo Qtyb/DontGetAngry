@@ -1,5 +1,5 @@
-from logger_conf import logger, reveal_name
-from figure import Figure
+from game.logger_conf import logger, reveal_name
+from game.figure import Figure
 
 
 class Board:
@@ -36,19 +36,23 @@ class Board:
             logger.info("registered player {}".format(player.id))
 
     def display_board(self):
-        board = ""
+        board_view = ""
         for p in self.players:
-            board += "Board: "
+            board_view += "Board: "
             i = 0
             for f in self.fields:
+                if i in self.players_start_pos:
+                    index = self.players_start_pos.index(i)
+                    f = "S{}".format(index)
                 if isinstance(f, Figure):
-                    f = f.name
-                board += "|{}".format(f)
+                    f += f.name                    
+
+                board_view += "|{}".format(f)
                 i += 1
 
-            board += "|\n"
+            board_view += "|\n"
 
-        return board
+        return board_view
 
 
 

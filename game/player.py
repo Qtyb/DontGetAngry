@@ -1,5 +1,5 @@
-from figure import Figure
-from logger_conf import logger
+from game.figure import Figure
+from game.logger_conf import logger
 
 
 class Player:
