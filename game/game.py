@@ -6,10 +6,10 @@ from game.logger_conf import logger, reveal_name
 
 class Game:
 
-    def __init__(self, player_amount, field_amount):
+    def __init__(self, field_amount, player_names):
+        self.player_names = player_names
         self.field_amount = field_amount
-        self.player_amount = player_amount
-        self.game_board = Board(player_amount, field_amount)
+        self.game_board = Board(player_names.count(), field_amount)
         self.players = []
         self.no_winner = True
 
@@ -28,7 +28,6 @@ class Game:
                             player.move_figure(self.game_board, roll)
                         else:
                             player.place_figure(self.game_board)
-                    
                     else:
                         player.move_figure(self.game_board, roll)
 
@@ -81,8 +80,8 @@ class Game:
 
 
     def start_game(self):
-        for i in range(self.player_amount):
-            player = Player("Player-{}".format(i), "Color-{}".format(i))
+        for i in range(self.player_names):
+            player = Player("P-{}".format(i), "Color-{}".format(i))
             self.game_board.register_player(player)
             self.players.append(player)
 

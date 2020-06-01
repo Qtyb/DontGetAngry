@@ -27,8 +27,10 @@ class GameThread(threading.Thread):
             TLV_PLACEFIGURE_TAG: self.rcv_place_figure,
             TLV_MOVEFIGURE_TAG: self.rcv_move_figure
         }
+
         self.next_player = 0
-        self.game = Game(self.nplayers, 24) #Board should scale but will not, because it is waste of time ;)
+        players =  ['1','2']
+        self.game = Game(players, 24) #Board should scale but will not, because it is not important :)
 
     def run(self):
         try:
@@ -69,20 +71,19 @@ class GameThread(threading.Thread):
                 # debug output of board fields
                 logger.debug("Board fields after turn: {}".format(reveal_name(self.game.game_board.fields)))
 
-                # print(self.connections)
-                connection_list = [conn.sock for conn in self.connections]
-                # print(connection_list)
-                read_sockets, _, _ = select.select(connection_list, [], [])  # !TODO change to poll()
-
-                for sock in read_sockets:
-                    self.handle_msg(sock)
-
         except (EOFError, OSError) as e:
             print("[ERROR-GAME] Error while handling message: ", str(e))
             self.close_all()
             return
         except ValueError as e:
             print("[ERROR] Unknown tag received")
+
+    def wait_for_message(self):
+        connection_list = [conn.sock for conn in self.connections]
+        read_sockets, _, _ = select.select(connection_list, [], [])  # !TODO change to poll()
+
+        for sock in read_sockets:
+            self.handle_msg(sock)
 
     def rcv_continue(self):
         print("continue received")
