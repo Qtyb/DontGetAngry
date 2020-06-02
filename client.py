@@ -9,6 +9,7 @@ import select
 import threading
 import os
 from pytlv.TLV import *
+from game.logger_conf import client_logger
 
 
 def sig_alarm_handler(signum, stack):
@@ -33,16 +34,18 @@ class ClientDGA:
             self.read_sockets.append(self.sock)
             self.read_sockets.append(sys.stdin)
         except OSError as e:
-            print("socket error: {}".format(str(e)))
+            client_logger.error("socket error: {}".format(str(e)))
 
     def connect(self, addr, port):
         try:
             self.sock.connect((addr, port))
         except OSError as e:
-            print("connect error: {}".format(str(e)))
+            client_logger.error("connect error: {}".format(str(e)))
+            sys.exit()
 
     def close(self):
         self.sock.close()
+        sys.exit()
 
     def run(self):
         try:
@@ -61,11 +64,11 @@ class ClientDGA:
                     continue
                 self.handle_input(msg)
         except KeyboardInterrupt:
-            print("Keyboard interrupt")
+            client_logger.error("Keyboard interrupt")
         except OSError as e:
-            print("[ERROR] Server error: ", str(e))
+            client_logger.error("Server error: " + str(e))
         except Exception as e:
-            print("Exception: ", str(e))
+            client_logger.error("Exception: " + str(e))
         finally:
             self.running = False
             self.close_flag = True
@@ -83,13 +86,18 @@ class ClientDGA:
                 #     print("[ERROR] Server error")
             except timeout:
                 if self.close_flag:
-                    print("Close flag")
+                    client_logger.debug("Close flag")
                     return
             except (OSError, EOFError, KeyboardInterrupt, ChangeStateException) as e:
-                print("[ERROR] Error while reading data: ", str(e))
+                client_logger.error("Error while reading data: " + str(e))
                 return
 
     def handle_answer(self, ans):
+        """
+        Handle response from the server. It can change state of the client e.g. game started or
+        just print received information.
+        ans     (dict)  : TLV: str
+        """
         if TLV_STARTED_TAG in ans:
             self.game_started = True
 
@@ -104,41 +112,50 @@ class ClientDGA:
             sendTlv(self.sock, tlv)
             server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
             if TLV_OK_TAG in server_ans:
-                print(server_ans[TLV_OK_TAG])
+                print(remove_tlv_padding(server_ans[TLV_OK_TAG]))
                 break
+            elif TLV_FAIL_TAG in server_ans:
+                print(remove_tlv_padding(server_ans[TLV_FAIL_TAG]))
 
     def set_room(self):
-        room = -1
+        """
+        Set room number in a loop. If non-int is passed from stdin or server send negative response then try again.
+        If server sends back positive response then break and return None.
+        """
         while True:
             room = input("Create or select existing channel\n> ")
             try:
                 int(room)
                 tlv = add_tlv_tag(TLV_ROOM_TAG, room)
-                # sendText(self.sock, create_msg(room))  # !TODO change to TLV format
                 sendTlv(self.sock, tlv)
-                server_ans = recvTlv(self.sock)  # maybe each header of server response should contain OK/FAIL
-                if TLV_OK_TAG in server_ans:
-                    print(server_ans[TLV_OK_TAG])
+                server_ans = recvTlv(self.sock)
+
+                if TLV_OK_TAG in server_ans:    # positive response
+                    client_logger.debug(server_ans[TLV_OK_TAG])
+                    print("Server answer: ", server_ans[TLV_OK_TAG])
                     break
                 if TLV_FAIL_TAG in server_ans:
-                    print(server_ans[TLV_FAIL_TAG])
+                    client_logger.debug(server_ans[TLV_FAIL_TAG])
+                    print("Server answer: ", server_ans[TLV_FAIL_TAG])
+
             except ValueError:
-                print("Try again")
+                client_logger.info("Try again")
 
     def handle_input(self, msg):
         if msg.upper().strip() in ["1", "GET_ROOMS"]:
             self.get_server_rooms()
-        elif msg.upper().strip() in ["2", "START"]:
+        elif msg.upper().strip() in ["2", "GET_USER_INFO"]:
+            self.get_user_info()
+        elif msg.upper().strip() in ["3", "START"]:
             self.send_start_msg()
-        # elif msg.upper().strip() in ["3", "JOIN"]:
-        #     self.set_room()
         elif msg.upper().strip() in ["4", "HELP", "INFO"]:
             self.print_options()
 
     def print_options(self):
         interface_msg = """
         1. GET_ROOMS : get information about room status
-        2. START : start a game, available only if you joined a room with at least other player
+        2. GET_USER_INFO : get information about your status
+        3. START : start a game, available only if you joined a room with at least other player
         4. HELP : print options
         """
         print(interface_msg)
@@ -149,6 +166,10 @@ class ClientDGA:
     def get_server_rooms(self):
         """Server should response with rooms stats e.g. room 2: 1/4 players status: WAITING FOR PLAYERS"""
         tlv = add_tlv_tag(TLV_GET_ROOMS, "-")
+        sendTlv(self.sock, tlv)
+
+    def get_user_info(self):
+        tlv = add_tlv_tag(TLV_GET_USERINFO, "-")
         sendTlv(self.sock, tlv)
 
     def get_server_my_room(self):

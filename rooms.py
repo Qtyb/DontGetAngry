@@ -56,6 +56,8 @@ class Room:
         game.start()
         return True
 
+
+
     def __len__(self):
         return len(self.room_members)
 
@@ -123,7 +125,7 @@ class RoomManager:
 
         def disconnect_client(self, conn):
             try:
-                server_logger.debug("RM: Disconnect connection")
+                server_logger.debug(f"RM: Disconnect connection {repr(conn.cli)}")
                 self.rooms[conn.cli.rnum].remove(conn)
                 if self.rooms[conn.cli.rnum].is_empty():
                     server_logger.info("Close room {}".format(conn.cli.rnum))
@@ -136,8 +138,12 @@ class RoomManager:
             Get list of all the clients that joined room.
             :return:    (list)  : list of Client(s)
             """
-            clients = [conn.cli for room in self.rooms.values() for conn in room]
+            clients = [conn.cli for room in self.rooms.values() for conn in room.room_members]
             return clients
+
+        def get_all_nicknames(self):
+            nicknames = [conn.cli.name for room in self.rooms.values() for conn in room.room_members]
+            return nicknames
 
         def get_rooms_description(self):
             """

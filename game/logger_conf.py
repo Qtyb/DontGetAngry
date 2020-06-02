@@ -6,6 +6,7 @@ from logging.handlers import TimedRotatingFileHandler
 FORMATTER = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
 LOG_FILE = "log_files/game.log"
 SERVER_LOG_FILE = "log_files/server.log"
+CLIENT_LOG_FILE = "log_files/client.log"
 
 def get_console_handler():
     console_handler = logging.StreamHandler(sys.stdout)
@@ -53,3 +54,4 @@ def reveal_name(list):
 
 logger = get_logger("game")
 server_logger = setup_logger("server", SERVER_LOG_FILE, level=logging.DEBUG)
+client_logger = setup_logger("client", CLIENT_LOG_FILE, level=logging.DEBUG)

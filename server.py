@@ -6,6 +6,10 @@ import select
 from exceptions import *
 from rooms import RoomManager
 from game.logger_conf import server_logger
+import daemon
+
+
+connection_list = {}   # all sockets handled by server
 
 
 def is_ipv4(addr):
@@ -32,7 +36,11 @@ def is_valid_port(port):
     return False
 
 
-connection_list = {}   # all sockets handled by server
+def get_all_nicknames():
+    print(connection_list.values())
+    nicknames = [conn.cli.name for conn in connection_list.values() if isinstance(conn, Connection)]
+    print(nicknames)
+    return nicknames
 
 
 class DontGetAngryServer:
@@ -149,10 +157,10 @@ def unsubscribe_client(sock):
 class Client:
 
     def __init__(self, conn, addr):
-        self.sd = conn
-        self.addr = addr
-        self.name = "Unknown"
-        self.rnum = -1
+        self.sd = conn          # socket
+        self.addr = addr        # (ip_addr, port)
+        self.name = "Unknown"   # nickname
+        self.rnum = -1          # room number
 
     def set_nickname(self, nickname):
         self.name = nickname
@@ -160,8 +168,11 @@ class Client:
     def set_rnumber(self, rnum):
         self.rnum = rnum
 
-    def __str__(self):
+    def __repr__(self):
         return self.name + " " + str(self.addr) + " room: " + str(self.rnum)
+
+    def __str__(self):
+        return f"Nickname: {self.name}\nConnected to the room: {self.rnum}"
 
 
 class Connection:
@@ -172,7 +183,7 @@ class Connection:
     def __init__(self, cli, cli_sock):
         self.cli = cli
         self.sock = cli_sock
-        self.room_manager = RoomManager()       # singleton
+        self.room_manager = RoomManager()
         self.state = INIT
         self.received_tlv = None
         self.msg_handlers = {
@@ -180,7 +191,8 @@ class Connection:
             TLV_ROOM_TAG: self.recv_room,
             TLV_GET_ROOMS: self.send_room_info,
             TLV_START_MSG: self.recv_start,
-            TLV_ROLLDICE_TAG: self.recv_roll
+            TLV_ROLLDICE_TAG: self.recv_roll,
+            TLV_GET_USERINFO: self.send_userinfo
         }
 
     def handle_msg2(self):
@@ -198,6 +210,11 @@ class Connection:
     def recv_nickname(self):
         """Receive nickname from client, raise OSError if error occurs"""
         nickname = remove_tlv_padding(self.received_tlv[TLV_NICKNAME_TAG])
+        if nickname in get_all_nicknames():
+            server_logger.debug(f"Nickname already exists: {nickname}")
+            self.snd_notification(TLV_FAIL_TAG, "Nickname already exists")
+            return
+
         server_logger.debug(f"Nickname received: {nickname}")
         self.cli.set_nickname(nickname)
         self.snd_notification(TLV_OK_TAG, self.get_welcome_message())
@@ -205,14 +222,16 @@ class Connection:
     def recv_room(self):
         """
         Try to join or create an room. Returns msg that should be send to the client.
-        :return:    (str)   : msg that describe if operation was successful
         """
         rnum = remove_tlv_padding(self.received_tlv[TLV_ROOM_TAG])
+        # check if number is an integer greater than 0
         try:
             rnum = int(rnum)
+            if rnum < 1:
+                raise ValueError()
         except ValueError:
             server_logger.warning("Wrong room number: {}".format(rnum))
-            self.snd_notification(TLV_FAIL_TAG)
+            self.snd_notification(TLV_FAIL_TAG, "You can join/create a room only with positive number!")
             return
 
         if self.room_manager.join_client(self, rnum):
@@ -226,7 +245,7 @@ class Connection:
         if not msg:     # client closed connection
             self.room_manager.disconnect_client(self)
             raise ClearClientException()
-        server_logger.debug("Msg from {} : {}".format(str(self.cli), msg))
+        server_logger.debug("Msg from {} : {}".format(repr(self.cli), msg))
         return msg
 
     def recv_start(self):
@@ -236,7 +255,7 @@ class Connection:
             return
 
         for conn in room.room_members:
-            server_logger.info(f"Client {str(conn.cli)} unsubscribed")
+            server_logger.info(f"Client {repr(conn.cli)} unsubscribed")
             unsubscribe_client(conn.sock)
 
     def recv_roll(self):    # !TODO connection reset handling
@@ -251,6 +270,10 @@ class Connection:
 
     def send_room_info(self):
         tlv = add_tlv_tag(TLV_INFO_TAG, self.room_manager.get_rooms_description())
+        sendTlv(self.sock, tlv)
+
+    def send_userinfo(self):
+        tlv = add_tlv_tag(TLV_INFO_TAG, str(self.cli))
         sendTlv(self.sock, tlv)
 
     def get_welcome_message(self):
@@ -277,5 +300,5 @@ if __name__ == "__main__":
     elif len(sys.argv) == 2:
         addr = sys.argv[1]
 
-
+    # with daemon.DaemonContext():
     serverDGA = DontGetAngryServer(addr, port)

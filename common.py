@@ -11,6 +11,7 @@ TLV_FAIL_TAG = '1112'
 
 TLV_INFO_TAG = '0100'   # msg to print
 TLV_GET_ROOMS = '3000'
+TLV_GET_USERINFO = '3001'
 
 TLV_START_MSG = '5000'
 TLV_STARTED_TAG = '5001'
@@ -20,7 +21,7 @@ TLV_PLACEFIGURE_TAG = '5012'
 TLV_MOVEFIGURE_TAG = '5013'
 
 TLV_TAGS = [TLV_NICKNAME_TAG, TLV_ROOM_TAG, TLV_ROLLDICE_TAG, TLV_CONTINUE_TAG, TLV_PLACEFIGURE_TAG, TLV_MOVEFIGURE_TAG, TLV_INFO_TAG, TLV_OK_TAG, TLV_FAIL_TAG,
-            TLV_GET_ROOMS, TLV_START_MSG, TLV_STARTED_TAG]
+            TLV_GET_ROOMS, TLV_START_MSG, TLV_STARTED_TAG, TLV_GET_USERINFO]
 
 # TLV END
 
@@ -28,7 +29,7 @@ def create_msg(msg):
     data_len = len(msg) if msg is not None else 0
     header_len = 10
     header = f"{data_len :< {header_len}}"
-    print("header: " + header)
+    # print("header: " + header)
     msg_enc = msg.encode("utf-8")
     return header + msg
 
@@ -101,7 +102,7 @@ def add_tlv_tag(tag, msg, tlv = None):
 
 def sendTlv(sock, tlv):
     message_to_send = tlv.tlv_string
-    print("Sending TLV:", message_to_send)
+    # print("Sending TLV:", message_to_send)
 
     sendText(sock, create_msg(message_to_send))  
 
