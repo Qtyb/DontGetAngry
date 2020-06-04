@@ -8,6 +8,7 @@ TLV_ROOM_TAG = '0002'
 # notifications
 TLV_OK_TAG = '1111'
 TLV_FAIL_TAG = '1112'
+TLV_ROLLDICERESULT_TAG = '1113'
 
 TLV_INFO_TAG = '0100'   # msg to print
 TLV_GET_ROOMS = '3000'
@@ -15,13 +16,15 @@ TLV_GET_USERINFO = '3001'
 
 TLV_START_MSG = '5000'
 TLV_STARTED_TAG = '5001'
+TLV_FINISHED_TAG = '5002'
+TLV_NEWTURN_TAG = '5003'
 TLV_ROLLDICE_TAG = '5010'
-TLV_CONTINUE_TAG = '5011'
-TLV_PLACEFIGURE_TAG = '5012'
-TLV_MOVEFIGURE_TAG = '5013'
+TLV_MOVEORPLACE_TAG = '5012'
+TLV_PLACEFIGURE_TAG = '5013'
+TLV_MOVEFIGURE_TAG = '5014'
 
-TLV_TAGS = [TLV_NICKNAME_TAG, TLV_ROOM_TAG, TLV_ROLLDICE_TAG, TLV_CONTINUE_TAG, TLV_PLACEFIGURE_TAG, TLV_MOVEFIGURE_TAG, TLV_INFO_TAG, TLV_OK_TAG, TLV_FAIL_TAG,
-            TLV_GET_ROOMS, TLV_START_MSG, TLV_STARTED_TAG, TLV_GET_USERINFO]
+TLV_TAGS = [TLV_NICKNAME_TAG, TLV_ROOM_TAG, TLV_ROLLDICE_TAG, TLV_NEWTURN_TAG, TLV_PLACEFIGURE_TAG, TLV_MOVEFIGURE_TAG, TLV_INFO_TAG, TLV_OK_TAG, TLV_FAIL_TAG,
+            TLV_ROLLDICERESULT_TAG, TLV_GET_ROOMS, TLV_START_MSG, TLV_STARTED_TAG, TLV_FINISHED_TAG, TLV_MOVEORPLACE_TAG, TLV_GET_USERINFO]
 
 # TLV END
 
@@ -31,7 +34,9 @@ def create_msg(msg):
     header = f"{data_len :< {header_len}}"
     # print("header: " + header)
     msg_enc = msg.encode("utf-8")
-    return header + msg
+    created_msg = header + msg
+    #print("created message: ", created_msg)
+    return created_msg
 
 def sendText(sock, msg):
     msg = msg.encode("utf-8")
@@ -110,9 +115,12 @@ def recvTlv(sock):      # !TODO handle EOFError
     msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
     msg = recvall(sock, msg_len).decode("utf-8")
     tlv = create_tlv()
-    # print("rcv msg: ", msg)
+    print("recvTlv msg: ", msg)
     parsed_msg = tlv.parse(msg)
-    # print("parsed recvTLV: ", parsed_msg)
+    for key, value in parsed_msg.items():
+        parsed_msg[key] = remove_tlv_padding(value)
+
+    print("parsed recvTLV: ", parsed_msg)
     return parsed_msg
 
 def get_types(tlv_msg):

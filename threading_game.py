@@ -17,20 +17,26 @@ class GameThread(threading.Thread):
         self.rnum = rnum     # we need it to close the room
         self.nplayers = len(connections)
         self.running = False
-        self.current_player = None
         self.sorted_rolls = None
         self.received_tlv = None
         self.send_game_started()
         self.msg_handlers = {
             TLV_ROLLDICE_TAG: self.rcv_rol_dice,
-            TLV_CONTINUE_TAG: self.rcv_continue,
             TLV_PLACEFIGURE_TAG: self.rcv_place_figure,
             TLV_MOVEFIGURE_TAG: self.rcv_move_figure
         }
+        self.place_figure = None
+        self.move_figure = None
+        self.roll_command = None
+        self.roll = None
 
         self.next_player = 0
-        players =  ['1','2']
-        self.game = Game(players, 24) #Board should scale but will not, because it is not important :)
+        player_names = []
+        for i in connections:
+            player_names.append(i.cli.name) 
+
+        print("player_names: {}".format(player_names))
+        self.game = Game(player_names, 24) #Board should scale but will not, because it is not important :)
 
     def run(self):
         try:
@@ -40,18 +46,18 @@ class GameThread(threading.Thread):
             # self.create()
             while self.running:
                 for player in self.game.players:
+                    self.clear_before_turn()
+                    self.send_new_turn_started(player.name)
                     self.game.start_player_turn(player)
+                    roll = self.wait_dice_message()
                     if player.has_figures_on_board(self.game.game_board):
-                        
-                        roll = self.game.roll_d6()
                         if roll == 6 and len(player.start_figures) != 0:
                             ### PLAYER CAN DECIDE HERE
-                            player_wants_moving = True
+                            player_wants_moving = self.wait_move_or_place_figure()
                             if player_wants_moving:
                                 player.move_figure(self.game.game_board, roll)
                             else:
                                 player.place_figure(self.game.game_board)
-                        
                         else:
                             player.move_figure(self.game.game_board, roll)
 
@@ -63,7 +69,7 @@ class GameThread(threading.Thread):
                                 break
                             
                 if(self.game.is_player_winner(player)):
-                    logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
+                    logger.info("Player {} wdevon the game after {} turns!".format(player.name, player.turns))
                     break
 
                 logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
@@ -77,6 +83,21 @@ class GameThread(threading.Thread):
             return
         except ValueError as e:
             print("[ERROR] Unknown tag received")
+     
+    def wait_move_or_place_figure(self):
+        while self.running:
+            self.wait_for_message()
+            if self.place_figure is not None:
+                return True
+            if self.move_figure is not None:
+                return False
+    
+    def wait_dice_message(self):
+        while self.running:
+            self.wait_for_message()
+            if self.roll is not None:
+                self.roll = None
+                return self.roll
 
     def wait_for_message(self):
         connection_list = [conn.sock for conn in self.connections]
@@ -85,9 +106,6 @@ class GameThread(threading.Thread):
         for sock in read_sockets:
             self.handle_msg(sock)
 
-    def rcv_continue(self):
-        print("continue received")
-
     def rcv_place_figure(self):
         print("place figure received")
 
@@ -95,13 +113,14 @@ class GameThread(threading.Thread):
         print("move figure received")
 
     def rcv_rol_dice(self):
-        roll = int(self.received_tlv[TLV_ROLLDICE_TAG])
-        print("player roll: {}".format(roll))
+        print("rcv_rol_dice invoked")
+        self.roll = self.game.roll_d6()
+        print("player roll: {}".format(self.roll))
         # update game status
 
     def snd_msg_to_all(self, msg):
         """Send message to all connected players"""
-        print("[SEND ALL]")
+        print("[SEND ALL] msg: {}".format(msg))
         for conn in self.connections:
             tlv = add_tlv_tag(TLV_INFO_TAG, msg)
             sendTlv(conn.sock, tlv)
@@ -124,9 +143,18 @@ class GameThread(threading.Thread):
         conn = self.connections[0]
         conn.room_manager.close_room(conn.cli.rnum)
 
+    def send_new_turn_started(self, player_name):
+        print("send_new_turn_started for player {}".format(player_name))
+        for conn in self.connections:
+            conn.snd_notification(TLV_NEWTURN_TAG, player_name)#{}\n".format(self.game.game_board.display_board()))
+
     def send_game_started(self):
         for conn in self.connections:
             conn.snd_notification(TLV_STARTED_TAG, "\n*****Game Started*****\n")
+
+    def clear_before_turn(self):
+        self.place_figure = None
+        self.move_figure = None
 
     def handle_msg(self, sock):
         if self.connections[self.next_player].sock == sock:

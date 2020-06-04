@@ -43,7 +43,7 @@ class Board:
             for f in self.fields:
                 if i in self.players_start_pos:
                     index = self.players_start_pos.index(i)
-                    f = "S{}".format(index)
+                    f = "P{}".format(index)
                 if isinstance(f, Figure):
                     f += f.name                    
 

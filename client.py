@@ -27,6 +27,9 @@ class ClientDGA:
         self.close_flag = False
         self.nickname = ""
         self.game_started = False
+        self.game_client_turn = False
+        self.game_roll = None
+        self.game_rolled = False
 
     def init(self):
         try:
@@ -49,7 +52,8 @@ class ClientDGA:
 
     def run(self):
         try:
-            self.set_nickname()
+            self.nickname = self.set_nickname()
+            print("My nickname is ", self.nickname)
             self.set_room()
             self.running = True
             read_thread = threading.Thread(target=self.read_loop)
@@ -59,10 +63,20 @@ class ClientDGA:
             while self.running:
                 if self.game_started:
                     print("GAME flag is set") # !TODO handle game
-                msg = input(">> ")
-                if not msg:   # enter pressed
-                    continue
-                self.handle_input(msg)
+                    if self.game_client_turn:
+                        print("GAME client turn flag is set")
+                        self.send_roll_command()
+                        if self.game_roll is not None:
+                            print("GAME roll is not null")
+                            self.send_place_or_move_command()
+                            self.game_roll = None
+                            self.game_client_turn = False
+                            print("Player {} turn ended".format(self.nickname))
+                else:
+                    msg = input("Press enter to refresh")
+                    if not msg:   # enter pressed
+                        continue
+                    self.handle_options_input(msg)
         except KeyboardInterrupt:
             client_logger.error("Keyboard interrupt")
         except OSError as e:
@@ -101,11 +115,27 @@ class ClientDGA:
         if TLV_STARTED_TAG in ans:
             self.game_started = True
 
+        if TLV_FINISHED_TAG in ans:
+            self.game_started = False
+
+        if TLV_NEWTURN_TAG in ans:
+            print("TLV_NEWTURN_TAG received msg: {}, tag value: {}".format(ans, ans[TLV_NEWTURN_TAG]))
+            if self.nickname.upper() == ans[TLV_NEWTURN_TAG].upper():
+                print("FINALLY MY TURN")
+                self.game_client_turn = True
+
         if TLV_INFO_TAG in ans:
             print("\n" + remove_tlv_padding(ans[TLV_INFO_TAG]))
 
-    def set_nickname(self):
-        """Send nickname to the server and anticipate positive response"""
+        #TODO remove
+        if TLV_MOVEORPLACE_TAG in ans:
+            print("TLV_MOVEORPLACE_TAG received")
+
+        if TLV_ROLLDICERESULT_TAG in ans:
+            self.game_roll = ans[TLV_ROLLDICERESULT_TAG]
+            self.game_rolled = True
+
+    def move_or_place(self):
         while True:
             nickname = input("Your nickname: ")
             tlv = add_tlv_tag(TLV_NICKNAME_TAG, nickname)
@@ -116,6 +146,45 @@ class ClientDGA:
                 break
             elif TLV_FAIL_TAG in server_ans:
                 print(remove_tlv_padding(server_ans[TLV_FAIL_TAG]))
+
+    def send_place_or_move_command(self):
+        """Send place figure command to the server and anticipate positive response"""
+        while True:
+            self.print_ingame_options()
+            msg = input(">> ")
+            tlv_tag = self.handle_ingame_options_input(msg)
+
+            self.print_ingame_figure_choice()
+            msg = input(">> ")
+            figure = self.handle_ingame_figure_choice_input(msg)
+            
+            tlv = add_tlv_tag(tlv_tag, figure)
+            sendTlv(self.sock, tlv)
+            server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
+            if TLV_OK_TAG in server_ans:
+                print(server_ans[TLV_OK_TAG])
+                break
+    
+    def send_roll_command(self):
+        """Send roll dice command to the server and anticipate positive response with roll result"""
+        while True:
+            tlv = add_tlv_tag(TLV_ROLLDICE_TAG, self.nickname)
+            sendTlv(self.sock, tlv)
+            server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
+            if TLV_OK_TAG in server_ans:
+                print("You rolled {}".format(server_ans[TLV_OK_TAG]))
+                return server_ans[TLV_OK_TAG]    
+
+    def set_nickname(self):
+        """Send nickname to the sever and anticipate positive response"""
+        while True:
+            nickname = input("Your nickname: ")
+            tlv = add_tlv_tag(TLV_NICKNAME_TAG, nickname)
+            sendTlv(self.sock, tlv)
+            server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
+            if TLV_OK_TAG in server_ans:
+                print(server_ans[TLV_OK_TAG])
+                return nickname
 
     def set_room(self):
         """
@@ -141,7 +210,7 @@ class ClientDGA:
             except ValueError:
                 client_logger.info("Try again")
 
-    def handle_input(self, msg):
+    def handle_options_input(self, msg):
         if msg.upper().strip() in ["1", "GET_ROOMS"]:
             self.get_server_rooms()
         elif msg.upper().strip() in ["2", "GET_USER_INFO"]:
@@ -160,6 +229,47 @@ class ClientDGA:
         """
         print(interface_msg)
 
+    def handle_ingame_options_input(self, msg):
+        if msg.upper().strip() in ["1", "MOVE_FIGURE"]:
+            return TLV_MOVEFIGURE_TAG
+        elif msg.upper().strip() in ["2", "PLACE_FIGURE"]:
+            return TLV_PLACEFIGURE_TAG
+        elif msg.upper().strip() in ["0", "EXIT"]:
+            self.handle_exit_command()
+
+    def print_ingame_options(self):
+        interface_msg = """
+        1. MOVE_FIGURE : move figure
+        2. PLACE_FIGURE : place figure
+        0. EXIT : leave game
+        """
+        print(interface_msg)
+
+    def handle_ingame_figure_choice_input(self, msg):
+        if msg.upper().strip() in ["1"]:
+            return "1"
+        elif msg.upper().strip() in ["2"]:
+            return "2"
+        elif msg.upper().strip() in ["3"]:
+            return "3"
+        elif msg.upper().strip() in ["4"]:
+            return "4"
+        elif msg.upper().strip() in ["0", "EXIT"]:
+            self.handle_exit_command()
+
+    def print_ingame_figure_choice(self):
+        interface_msg = """
+        1. Figure 1
+        2. Figure 2
+        3. Figure 3
+        4. Figure 4
+        0. EXIT : leave game
+        """
+        print(interface_msg)
+
+    def handle_exit_command(self):
+        sys.exit()
+    
     def send_reset_msg(self):
         pass
 

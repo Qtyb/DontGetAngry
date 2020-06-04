@@ -6,46 +6,12 @@ from game.logger_conf import logger, reveal_name
 
 class Game:
 
-    def __init__(self, field_amount, player_names):
+    def __init__(self, player_names, field_amount):
         self.player_names = player_names
         self.field_amount = field_amount
-        self.game_board = Board(player_names.count(), field_amount)
+        self.game_board = Board(len(player_names), field_amount)
         self.players = []
         self.no_winner = True
-
-    def __game_flow_demo(self):
-        self.start_game()
-        while self.no_winner:
-            for player in self.players:
-                self.start_player_turn(player)
-                if player.has_figures_on_board(self.game_board):
-                    
-                    roll = self.roll_d6()
-                    if roll == 6 and len(player.start_figures) != 0:
-                        ### PLAYER CAN DECIDE HERE
-                        player_wants_moving = True
-                        if player_wants_moving:
-                            player.move_figure(self.game_board, roll)
-                        else:
-                            player.place_figure(self.game_board)
-                    else:
-                        player.move_figure(self.game_board, roll)
-
-                # player has no figure on board
-                else:
-                    # three chances to roll a 6
-                    for i in range(3):
-                        if self.try_place_figure(player):
-                            break
-                        
-                if(self.is_player_winner(player)):
-                    logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
-                    break
-
-                logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
-                    reveal_name(player.start_figures), reveal_name(player.finished_figures)))
-                # debug output of board fields
-                logger.debug("Board fields after turn: {}".format(reveal_name(self.game_board.fields)))
 
     def is_player_winner(self, player):
         finished_figures = [figure for figure in player.finished_figures if hasattr(figure, "name")]
@@ -80,10 +46,45 @@ class Game:
 
 
     def start_game(self):
-        for i in range(self.player_names):
-            player = Player("P-{}".format(i), "Color-{}".format(i))
+        for i in range(len(self.player_names)):
+            player = Player(self.player_names[i], "Color-{}".format(i))
             self.game_board.register_player(player)
             self.players.append(player)
 
         # game loop
         logger.info("Starting new game")
+
+
+    def __game_flow_demo(self):
+        self.start_game()
+        while self.no_winner:
+            for player in self.players:
+                self.start_player_turn(player)
+                if player.has_figures_on_board(self.game_board):
+                    
+                    roll = self.roll_d6()
+                    if roll == 6 and len(player.start_figures) != 0:
+                        ### PLAYER CAN DECIDE HERE
+                        player_wants_moving = True
+                        if player_wants_moving:
+                            player.move_figure(self.game_board, roll)
+                        else:
+                            player.place_figure(self.game_board)
+                    else:
+                        player.move_figure(self.game_board, roll)
+
+                # player has no figure on board
+                else:
+                    # three chances to roll a 6
+                    for i in range(3):
+                        if self.try_place_figure(player):
+                            break
+                        
+                if(self.is_player_winner(player)):
+                    logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
+                    break
+
+                logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
+                    reveal_name(player.start_figures), reveal_name(player.finished_figures)))
+                # debug output of board fields
+                logger.debug("Board fields after turn: {}".format(reveal_name(self.game_board.fields)))
