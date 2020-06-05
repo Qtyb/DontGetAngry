@@ -1,4 +1,5 @@
-from socket import socket, AF_INET, SOCK_STREAM, timeout
+import errno
+from socket import socket, AF_INET, SOCK_STREAM, timeout, error
 import time
 from common import *
 from random import randint
@@ -48,19 +49,19 @@ class ClientDGA:
 
     def close(self):
         self.sock.close()
-        sys.exit()
+        sys.exit(-1)
 
     def run(self):
+        event = threading.Event()
+        read_thread = threading.Thread(target=self.read_loop, args=(event,), daemon=True)  # daemon will be closed with the main thread
         try:
             self.nickname = self.set_nickname()
             print("My nickname is ", self.nickname)
             self.set_room()
             self.running = True
-            read_thread = threading.Thread(target=self.read_loop)
-            read_thread.daemon = True
             read_thread.start()
             self.print_options()
-            while self.running:
+            while self.running and not event.is_set():
                 if self.game_started:
                     print("GAME flag is set") # !TODO handle game
                     if self.game_client_turn:
@@ -73,37 +74,46 @@ class ClientDGA:
                             self.game_client_turn = False
                             print("Player {} turn ended".format(self.nickname))
                 else:
-                    msg = input("Press enter to refresh")
+                    msg = input("Press enter to refresh: ")
+                    if event.is_set():  # server error
+                        break
+
+                    if self.game_client_turn:   # game started
+                        client_logger.debug("Game started, ignore input")
+                        continue
+
                     if not msg:   # enter pressed
                         continue
                     self.handle_options_input(msg)
+            # self.close()  # sys.exit() raises SystemExit so finally will be executed
+            raise Exception()
         except KeyboardInterrupt:
             client_logger.error("Keyboard interrupt")
-        except OSError as e:
+        except (OSError, EOFError) as e:
+            print("Server error")
             client_logger.error("Server error: " + str(e))
         except Exception as e:
+            print("Server error")
             client_logger.error("Exception: " + str(e))
         finally:
+            print("Closing...")
             self.running = False
-            self.close_flag = True
             self.close()
             sys.exit(-1)
 
-    def read_loop(self):        # !TODO timeout to signal
-        """ Thread that reads messages sending by the server. """
-        self.sock.settimeout(1)
+    def read_loop(self, event):        # !TODO timeout to signal
+        """ Thread that reads messages sent by the server. """
         while True:
             try:
                 server_ans = recvTlv(self.sock)
                 self.handle_answer(server_ans)
-                # if not server_ans:
-                #     print("[ERROR] Server error")
-            except timeout:
-                if self.close_flag:
-                    client_logger.debug("Close flag")
-                    return
-            except (OSError, EOFError, KeyboardInterrupt, ChangeStateException) as e:
+            except (OSError, EOFError, ChangeStateException) as e:
                 client_logger.error("Error while reading data: " + str(e))
+                event.set()  # alarm main thread that program should exit
+                return
+            except Exception as e:
+                client_logger.error("Other error while reading data: " + str(e))
+                event.set()  # alarm main thread that program should exit
                 return
 
     def handle_answer(self, ans):
@@ -179,6 +189,8 @@ class ClientDGA:
         """Send nickname to the sever and anticipate positive response"""
         while True:
             nickname = input("Your nickname: ")
+            if not nickname:
+                continue
             tlv = add_tlv_tag(TLV_NICKNAME_TAG, nickname)
             sendTlv(self.sock, tlv)
             server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
