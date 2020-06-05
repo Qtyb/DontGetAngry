@@ -78,7 +78,7 @@ class ClientDGA:
                     if event.is_set():  # server error
                         break
 
-                    if self.game_client_turn:   # game started
+                    if self.game_started:   # game started
                         client_logger.debug("Game started, ignore input")
                         continue
 
