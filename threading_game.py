@@ -57,9 +57,11 @@ class GameThread(threading.Thread):
                             if player_wants_moving:
                                 player.move_figure(self.game.game_board, roll)
                             else:
-                                player.place_figure(self.game.game_board)
+                                chosen = self.wait_select_figure()
+                                player.place_figure(self.game.game_board, chosen)
                         else:
-                            player.move_figure(self.game.game_board, roll)
+                            chosen = self.wait_select_figure()
+                            player.move_figure(self.game.game_board, roll, chosen)
 
                     # player has no figure on board
                     else:
@@ -83,15 +85,31 @@ class GameThread(threading.Thread):
             return
         except ValueError as e:
             print("[ERROR] Unknown tag received")
-     
+
     def wait_move_or_place_figure(self):
         while self.running:
             self.wait_for_message()
             if self.place_figure is not None:
                 return True
+
             if self.move_figure is not None:
                 return False
-    
+
+    def wait_select_figure(self):
+        while self.running:
+            msg = self.wait_for_message()
+
+            if msg == "1":
+                figure = 1
+            elif msg == "2":
+                figure = 2
+            elif msg == "3":
+                figure = 3
+            elif msg == "4":
+                figure = 4
+
+            return figure
+
     def wait_dice_message(self):
         while self.running:
             self.wait_for_message()

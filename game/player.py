@@ -5,10 +5,9 @@ from game.logger_conf import logger
 class Player:
     """a class that represents a Player of the Board Game"""
 
-    def __init__(self, name, color):
+    def __init__(self, name):
         self.name = name
         self.id = "undefined"
-        self.color = color
         self.figure_amount = 4
         self.figures = []
         self.start_figures = []
@@ -22,7 +21,7 @@ class Player:
 
         # create start figures for player
         for x in range(4):
-            figure = Figure("{}-{}-{}".format(self.name, self.color, x))
+            figure = Figure("{}-{}".format(self.name, x))
             self.start_figures.append(figure)
             self.figures.append(figure)
 
@@ -69,8 +68,6 @@ class Player:
         """
         method to select the most suitable figure
         """
-        print("Select figure")
-        # chosen_figure = input()
         selected_figure = "undefined"
         for field in board.fields:
             if hasattr(field, "name"):
@@ -90,6 +87,8 @@ class Player:
                         for slot in free_slots:
                             if abs(figure.distance_to_target - move_amount) == slot:
                                 figure.finish_slot = slot
+                                logger.info(
+                                    "Player {} reached the finish with figure {}!".format(self.name, figure.name))
                                 return figure
                     else:
                         # calc target field  of figure
@@ -101,8 +100,7 @@ class Player:
                         # check if more than one of player's figures on field
                         if len(self.start_figures) < 3:
                             # return figure if it has a chance to ban other figures
-                            if hasattr(board.fields[figure.target_field], "name") and self.name not in board.fields[
-                                figure.target_field].name:
+                            if hasattr(board.fields[figure.target_field], "name") and self.name not in board.fields[figure.target_field].name:
                                 return figure
                             # determine figure with closest distance to target
                             if hasattr(selected_figure, "distance_to_target"):
@@ -115,14 +113,37 @@ class Player:
 
         return selected_figure
 
-    def move_figure(self, board, move_amount):
+    def move_figure(self, board, move_amount, selected_figure):
         """
         method to select and move a player figure
         """
 
         # select figure
-
-        figure = self.select_figure(board, move_amount)
+        figure = self.figures[selected_figure-1]
+        for field in board.fields:
+            if hasattr(field, "name"):
+                if figure.name in field.name:
+                    # set figure
+                    figured = field
+                    # get field of figure
+                    figured.field = board.fields.index(figured)
+                    # check if figure can finish
+                    if figured.distance_to_target <= move_amount:
+                        # determine free slots in finished_figures
+                        free_slots = []
+                        for i in range(len(self.finished_figures)):
+                            if self.finished_figures[i] == "0":
+                                free_slots.append(i)
+                        for slot in free_slots:
+                            if abs(figured.distance_to_target - move_amount) == slot:
+                                figured.finish_slot = slot
+                    else:
+                        # calc target field  of figure
+                        figured.target_field = figured.field + move_amount
+                        # handle field loop
+                        if figured.target_field > board.field_amount - 1:
+                            diff = board.field_amount - figured.field
+                            figured.target_field = move_amount - diff
 
         if figure != "undefined":
             # check if figure has possible finish slot

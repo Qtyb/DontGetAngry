@@ -25,7 +25,7 @@ class Board:
         # only register unknown players
         if player.id not in self.players:
             # register player id
-            player.id = "{}-{}".format(player.name, player.color)
+            player.id = "{}-{}".format(player.name)
             self.players.append(player.id)
             # set player number
             player.no = len(self.players) - 1
