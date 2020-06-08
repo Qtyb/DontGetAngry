@@ -55,10 +55,10 @@ class GameThread(threading.Thread):
                             ### PLAYER CAN DECIDE HERE
                             player_wants_moving = self.wait_move_or_place_figure()
                             if player_wants_moving:
-                                player.move_figure(self.game.game_board, roll)
-                            else:
                                 chosen = self.wait_select_figure()
-                                player.place_figure(self.game.game_board, chosen)
+                                player.move_figure(self.game.game_board, roll, chosen)
+                            else:                                
+                                player.place_figure(self.game.game_board)
                         else:
                             chosen = self.wait_select_figure()
                             player.move_figure(self.game.game_board, roll, chosen)
