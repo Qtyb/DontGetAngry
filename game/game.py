@@ -43,6 +43,7 @@ class Game:
         logger.info(self.game_board.display_board())
         # grab players figures from cemetery
         player.grab_figures_from_cemetery(self.game_board)
+        print("Player {}, Turn {}:".format(player.name, player.turns))
 
 
     def start_game(self):

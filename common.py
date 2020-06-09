@@ -107,7 +107,7 @@ def add_tlv_tag(tag, msg, tlv = None):
 
 def sendTlv(sock, tlv):
     message_to_send = tlv.tlv_string
-    # print("Sending TLV:", message_to_send)
+    print("Sending TLV:", message_to_send)
 
     sendText(sock, create_msg(message_to_send))  
 

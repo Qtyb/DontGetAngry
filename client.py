@@ -31,6 +31,7 @@ class ClientDGA:
         self.game_client_turn = False
         self.game_roll = None
         self.game_rolled = False
+        self.roll_command_requested = False
 
     def init(self):
         try:
@@ -72,6 +73,7 @@ class ClientDGA:
                             self.send_place_or_move_command()
                             self.game_roll = None
                             self.game_client_turn = False
+                            self.roll_command_requested = False
                             print("Player {} turn ended".format(self.nickname))
                 else:
                     msg = input("Press enter to refresh: ")
@@ -131,7 +133,7 @@ class ClientDGA:
         if TLV_NEWTURN_TAG in ans:
             print("TLV_NEWTURN_TAG received msg: {}, tag value: {}".format(ans, ans[TLV_NEWTURN_TAG]))
             if self.nickname.upper() == ans[TLV_NEWTURN_TAG].upper():
-                print("FINALLY MY TURN")
+                print("Press enter to roll a dice")
                 self.game_client_turn = True
 
         if TLV_INFO_TAG in ans:
@@ -145,45 +147,38 @@ class ClientDGA:
             self.game_roll = ans[TLV_ROLLDICERESULT_TAG]
             self.game_rolled = True
 
-    def move_or_place(self):
-        while True:
-            nickname = input("Your nickname: ")
-            tlv = add_tlv_tag(TLV_NICKNAME_TAG, nickname)
-            sendTlv(self.sock, tlv)
-            server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
-            if TLV_OK_TAG in server_ans:
-                print(remove_tlv_padding(server_ans[TLV_OK_TAG]))
-                break
-            elif TLV_FAIL_TAG in server_ans:
-                print(remove_tlv_padding(server_ans[TLV_FAIL_TAG]))
-
     def send_place_or_move_command(self):
         """Send place figure command to the server and anticipate positive response"""
-        while True:
-            self.print_ingame_options()
-            msg = input(">> ")
-            tlv_tag = self.handle_ingame_options_input(msg)
+        #while True:
+        self.print_ingame_options()
+        msg = input(">> ")
+        tlv_tag = self.handle_ingame_options_input(msg)
 
-            self.print_ingame_figure_choice()
-            msg = input(">> ")
-            figure = self.handle_ingame_figure_choice_input(msg)
-            
-            tlv = add_tlv_tag(tlv_tag, figure)
-            sendTlv(self.sock, tlv)
-            server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
-            if TLV_OK_TAG in server_ans:
-                print(server_ans[TLV_OK_TAG])
-                break
+        self.print_ingame_figure_choice()
+        msg = input(">> ")
+        figure = self.handle_ingame_figure_choice_input(msg)
+        
+        tlv = add_tlv_tag(tlv_tag, figure)
+        add_tlv_tag(TLV_NICKNAME_TAG, self.nickname, tlv)
+
+        sendTlv(self.sock, tlv)
+        """server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
+        if TLV_OK_TAG in server_ans:
+            print(server_ans[TLV_OK_TAG])
+            break"""
     
     def send_roll_command(self):
         """Send roll dice command to the server and anticipate positive response with roll result"""
-        while True:
+        while not self.roll_command_requested:
+            print("Sending roll command")
             tlv = add_tlv_tag(TLV_ROLLDICE_TAG, self.nickname)
             sendTlv(self.sock, tlv)
+            self.roll_command_requested = True
             server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
-            if TLV_OK_TAG in server_ans:
-                print("You rolled {}".format(server_ans[TLV_OK_TAG]))
-                return server_ans[TLV_OK_TAG]    
+            if TLV_ROLLDICERESULT_TAG in server_ans:
+                print("You rolled {}".format(server_ans[TLV_ROLLDICERESULT_TAG]))
+                print("Roll command has been successfully sent")
+                return server_ans[TLV_ROLLDICERESULT_TAG]
 
     def set_nickname(self):
         """Send nickname to the sever and anticipate positive response"""
@@ -243,10 +238,13 @@ class ClientDGA:
 
     def handle_ingame_options_input(self, msg):
         if msg.upper().strip() in ["1", "MOVE_FIGURE"]:
+            print("MOVE FIGURE CHOSEN")
             return TLV_MOVEFIGURE_TAG
         elif msg.upper().strip() in ["2", "PLACE_FIGURE"]:
+            print("PLACE FIGURE CHOSEN")
             return TLV_PLACEFIGURE_TAG
         elif msg.upper().strip() in ["0", "EXIT"]:
+            print("EXIT CHOSEN")
             self.handle_exit_command()
 
     def print_ingame_options(self):
@@ -259,14 +257,19 @@ class ClientDGA:
 
     def handle_ingame_figure_choice_input(self, msg):
         if msg.upper().strip() in ["1"]:
+            print("Figure 1 chosen")
             return "1"
         elif msg.upper().strip() in ["2"]:
+            print("Figure 2 chosen")
             return "2"
         elif msg.upper().strip() in ["3"]:
+            print("Figure 3 chosen")
             return "3"
         elif msg.upper().strip() in ["4"]:
+            print("Figure 4 chosen")
             return "4"
         elif msg.upper().strip() in ["0", "EXIT"]:
+            print("Exit chosen")
             self.handle_exit_command()
 
     def print_ingame_figure_choice(self):
