@@ -47,7 +47,7 @@ class Game:
 
     def start_game(self):
         for i in range(len(self.player_names)):
-            player = Player(self.player_names[i], "Color-{}".format(i))
+            player = Player(self.player_names[i])
             self.game_board.register_player(player)
             self.players.append(player)
 
