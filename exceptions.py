@@ -25,3 +25,7 @@ class UnsubscribeException(Error):
 
 class ChangeStateException(Error):
     pass
+
+class UnknownTagException(Error):
+    """ Called if unknown tag is received """
+    pass

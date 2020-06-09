@@ -8,7 +8,7 @@ import signal
 import sys
 import select
 import threading
-import os
+import queue
 from pytlv.TLV import *
 from game.logger_conf import client_logger
 
@@ -32,6 +32,8 @@ class ClientDGA:
         self.game_roll = None
         self.game_rolled = False
         self.roll_command_requested = False
+        self.pipeline = queue.Queue(maxsize=50)     # queue to exchange packets between threads
+        self.current_msg = None                     # the msg to be handled (check wait_for_ack)
 
     def init(self):
         try:
@@ -56,11 +58,11 @@ class ClientDGA:
         event = threading.Event()
         read_thread = threading.Thread(target=self.read_loop, args=(event,), daemon=True)  # daemon will be closed with the main thread
         try:
-            self.nickname = self.set_nickname()
+            read_thread.start()
+            self.set_nickname()
             print("My nickname is ", self.nickname)
             self.set_room()
             self.running = True
-            read_thread.start()
             self.print_options()
             while self.running and not event.is_set():
                 if self.game_started:
@@ -108,7 +110,10 @@ class ClientDGA:
         while True:
             try:
                 server_ans = recvTlv(self.sock)
-                self.handle_answer(server_ans)
+                if TLV_OK_TAG or TLV_FAIL_TAG in server_ans:    # ACK / NACK response - main thread is awaiting for it
+                    self.pipeline.put(server_ans)
+                    continue
+                self.handle_answer(server_ans)      # received msg is not a control msg
             except (OSError, EOFError, ChangeStateException) as e:
                 client_logger.error("Error while reading data: " + str(e))
                 event.set()  # alarm main thread that program should exit
@@ -186,12 +191,16 @@ class ClientDGA:
             nickname = input("Your nickname: ")
             if not nickname:
                 continue
+
             tlv = add_tlv_tag(TLV_NICKNAME_TAG, nickname)
             sendTlv(self.sock, tlv)
-            server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
-            if TLV_OK_TAG in server_ans:
-                print(server_ans[TLV_OK_TAG])
-                return nickname
+
+            if self.wait_for_ack():
+                self.nickname = nickname
+                print(self.current_msg[TLV_OK_TAG])
+                return
+            else:
+                print(self.current_msg[TLV_FAIL_TAG])       # print error message
 
     def set_room(self):
         """
@@ -204,15 +213,13 @@ class ClientDGA:
                 int(room)
                 tlv = add_tlv_tag(TLV_ROOM_TAG, room)
                 sendTlv(self.sock, tlv)
-                server_ans = recvTlv(self.sock)
 
-                if TLV_OK_TAG in server_ans:    # positive response
-                    client_logger.debug(server_ans[TLV_OK_TAG])
-                    print("Server answer: ", server_ans[TLV_OK_TAG])
-                    break
-                if TLV_FAIL_TAG in server_ans:
-                    client_logger.debug(server_ans[TLV_FAIL_TAG])
-                    print("Server answer: ", server_ans[TLV_FAIL_TAG])
+                if self.wait_for_ack():     # positive answer
+                    print("Server answer: ", self.current_msg[TLV_OK_TAG])  # new msg is saved after wait_for_ack call
+                    client_logger.debug("Joined room number {}".format(room))
+                    return
+
+                print("Server answer: ", self.current_msg[TLV_FAIL_TAG])      # fail msg info
 
             except ValueError:
                 client_logger.info("Try again")
@@ -226,6 +233,30 @@ class ClientDGA:
             self.send_start_msg()
         elif msg.upper().strip() in ["4", "HELP", "INFO"]:
             self.print_options()
+
+    def wait_for_ack(self):
+        """
+        Blocks until new msg is put into the Queue. Returns True if msg contains OK_TAG. Otherwise, if msg contains
+        FAIL_TAG or any doesn't contain any control tag (OK/FAIL) it returns False.
+        @return:    (bool)  : indicates status of the control msg
+        """
+        msg = self.pipeline.get()       # blocks here
+        self.current_msg = msg          # msg can be read from outside of this method while it returns control information
+        # if msg is None:       # !TODO check if it can occur
+        #     return False
+        # print("MSG:   " + str(msg))
+        if TLV_OK_TAG in msg:
+            client_logger.debug("Received OK_TAG")
+            return True
+
+        elif TLV_FAIL_TAG in msg:
+            client_logger.debug("Received FAIL_TAG")
+            return False
+
+        else:
+            client_logger.debug("Received unknown tags: {}".format(get_types(msg)))
+            raise OSError("Unknown tag received, while waiting for control tag")
+
 
     def print_options(self):
         interface_msg = """

@@ -172,7 +172,7 @@ class Client:
         return self.name + " " + str(self.addr) + " room: " + str(self.rnum)
 
     def __str__(self):
-        return f"Nickname: {self.name}\nConnected to the room: {self.rnum}"
+        return f"\nNickname: {self.name}\nConnected to the room: {self.rnum}"
 
 
 class Connection:
@@ -251,7 +251,7 @@ class Connection:
     def recv_start(self):
         room = self.room_manager.rooms[self.cli.rnum]
         if not room.start_game():
-            self.snd_notification(TLV_INFO_TAG, "SERVER: Cannot start a game\n")
+            self.snd_notification(TLV_INFO_TAG, "\nCannot start a game\n")
             return
 
         for conn in room.room_members:
