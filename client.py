@@ -34,6 +34,7 @@ class ClientDGA:
         self.roll_command_requested = False
         self.pipeline = queue.Queue(maxsize=50)     # queue to exchange packets between threads
         self.current_msg = None                     # the msg to be handled (check wait_for_ack)
+        self.log_counter = 999
 
     def init(self):
         try:
@@ -65,10 +66,9 @@ class ClientDGA:
             self.running = True
             self.print_options()
 
-            log_counter = 1000
             while self.running and not event.is_set():
                 if self.game_started:
-                    self.log_game_is_running(log_counter)
+                    #print("GAME is running")
                     if self.game_client_turn:
                         print("GAME client turn flag is set")
                         self.game_roll = self.send_roll_command()
@@ -356,20 +356,13 @@ class ClientDGA:
         tlv = add_tlv_tag(TLV_START_MSG, "-")
         sendTlv(self.sock, tlv)
 
-    def log_game_is_running(self, counter):
-        if counter % 1000 == 0:
-            print("Game is running")
-        counter +=1
+    def rcv_response(validate):
+        def recv(s):
+            msg = recvText(s)
+            if validate(msg):
+                pass
 
-
-
-def rcv_response(validate):
-    def recv(s):
-        msg = recvText(s)
-        if validate(msg):
-            pass
-
-    return recv
+        return recv
 
 
 
