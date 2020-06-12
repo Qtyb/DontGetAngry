@@ -263,6 +263,16 @@ class Connection:
         roll = remove_tlv_padding(self.received_tlv[TLV_ROLLDICE_TAG])
         return int(roll)
 
+    def snd_ack_notification(self, flag, msg=""):       # handle OSError on higher level!
+        """Send message that contains control message"""
+        data_dict = {
+            flag: msg,
+            TLV_OK_TAG: "ok",
+        }
+
+        tlv = build_tlv_with_tags(data_dict)
+        sendTlv(self.sock, tlv)
+
     def snd_notification(self, flag, msg=""):       # handle OSError on higher level!
         """Send message that contains control message"""
         tlv = add_tlv_tag(flag, msg)

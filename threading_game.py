@@ -34,9 +34,11 @@ class GameThread(threading.Thread):
 
         player_names = []
         self.player_name_to_connection = {}
+        index = 0
         for i in connections:
             player_names.append(i.cli.name) 
-            self.player_name_to_connection[i.cli.name] = i
+            self.player_name_to_connection[i.cli.name] = index
+            index += 1
 
 
         print("player_names: {}".format(player_names))
@@ -56,7 +58,12 @@ class GameThread(threading.Thread):
                     self.game.start_player_turn(player)
 
                     roll = self.wait_dice_message()
+                    print("Player {} rolled {}".format(self.current_player.name, roll))
                     player_wants_place_figure = self.wait_want_place_figure()
+                    if player_wants_place_figure:
+                        print("Player {} chose to place figure: {}".format(self.current_player.name, self.place_figure))
+                    else:
+                        print("Player {} chose to move figure: {}".format(self.current_player.name, self.move_figure))
 
                     if player.has_figures_on_board(self.game.game_board):
                         print("Player {} has figures on board".format(player.name))
@@ -93,7 +100,7 @@ class GameThread(threading.Thread):
             self.close_all()
             return
         except ValueError as e:
-            print("[ERROR] Unknown tag received")
+            print("[ERROR] Unknown tag received: {}".format(e))
 
     def wait_want_place_figure(self):
         while self.running:
@@ -132,8 +139,12 @@ class GameThread(threading.Thread):
         self.roll = self.game.roll_d6()
         print("player roll: {}".format(self.roll))
 
-        for conn in self.connections:
-            conn.snd_notification(TLV_ROLLDICERESULT_TAG, str(self.roll))
+        print("rcv roll dice response to {}".format(self.current_player.name))
+        connection_index = self.player_name_to_connection[self.current_player.name]
+        print("rcv roll dice connection index is {}".format(connection_index))
+        self.connections[connection_index].snd_ack_notification(TLV_ROLLDICERESULT_TAG, str(self.roll))
+        #for conn in self.connections:
+        #    conn.snd_ack_notification(TLV_ROLLDICERESULT_TAG, str(self.roll))
 
         #self.send(self.player_name_to_connection[self.current_player.name].sock, TLV_ROLLDICERESULT_TAG, str(self.roll))
         # update game status

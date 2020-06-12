@@ -104,6 +104,19 @@ def add_tlv_tag(tag, msg, tlv = None):
 
     tlv.build({tag: msg})
     return tlv
+    
+def build_tlv_with_tags(data_dict):
+    tlv = create_tlv()
+
+    #print("Build tlv with dictionary: {}".format(data_dict))
+    parsed_dict = {}
+    for tag, value in data_dict.items():
+        parsed_dict[tag] = add_tlv_padding(value)
+
+    #print("Build tlv with dictionary after padding: {}".format(parsed_dict))
+    
+    tlv.build(parsed_dict)
+    return tlv
 
 def sendTlv(sock, tlv):
     message_to_send = tlv.tlv_string
@@ -115,12 +128,12 @@ def recvTlv(sock):      # !TODO handle EOFError
     msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
     msg = recvall(sock, msg_len).decode("utf-8")
     tlv = create_tlv()
-    print("recvTlv msg: ", msg)
+    #print("recvTlv msg: ", msg)
     parsed_msg = tlv.parse(msg)
     for key, value in parsed_msg.items():
         parsed_msg[key] = remove_tlv_padding(value)
 
-    print("parsed recvTLV: ", parsed_msg)
+    #print("parsed recvTLV: ", parsed_msg)
     return parsed_msg
 
 def get_types(tlv_msg):

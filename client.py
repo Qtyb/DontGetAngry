@@ -69,7 +69,7 @@ class ClientDGA:
                     print("GAME flag is set") # !TODO handle game
                     if self.game_client_turn:
                         print("GAME client turn flag is set")
-                        self.send_roll_command()
+                        self.game_roll = self.send_roll_command()
                         if self.game_roll is not None:
                             print("GAME roll is not null")
                             self.send_place_or_move_command()
@@ -110,9 +110,12 @@ class ClientDGA:
         while True:
             try:
                 server_ans = recvTlv(self.sock)
-                if TLV_OK_TAG or TLV_FAIL_TAG in server_ans:    # ACK / NACK response - main thread is awaiting for it
+                if TLV_OK_TAG in server_ans or TLV_FAIL_TAG in server_ans:    # ACK / NACK response - main thread is awaiting for it
+                    print("Message {} has ACK/NACK tag => saving to pipeline for future processing".format(server_ans))
                     self.pipeline.put(server_ans)
                     continue
+                
+                print("Message {} is a request from the server".format(server_ans))
                 self.handle_answer(server_ans)      # received msg is not a control msg
             except (OSError, EOFError, ChangeStateException) as e:
                 client_logger.error("Error while reading data: " + str(e))
@@ -129,7 +132,10 @@ class ClientDGA:
         just print received information.
         ans     (dict)  : TLV: str
         """
+        #print("Handle answer invoked")
+
         if TLV_STARTED_TAG in ans:
+            print("Game started tag received")
             self.game_started = True
 
         if TLV_FINISHED_TAG in ans:
@@ -149,6 +155,7 @@ class ClientDGA:
             print("TLV_MOVEORPLACE_TAG received")
 
         if TLV_ROLLDICERESULT_TAG in ans:
+            print("Roll dice result tag received")
             self.game_roll = ans[TLV_ROLLDICERESULT_TAG]
             self.game_rolled = True
 
@@ -163,10 +170,15 @@ class ClientDGA:
         msg = input(">> ")
         figure = self.handle_ingame_figure_choice_input(msg)
         
-        tlv = add_tlv_tag(tlv_tag, figure)
-        add_tlv_tag(TLV_NICKNAME_TAG, self.nickname, tlv)
+        data_dict = {
+            tlv_tag: figure,
+            TLV_NICKNAME_TAG: self.nickname,
+        }
 
+        print("Place or Move command options chosen {}".format(data_dict))
+        tlv = build_tlv_with_tags(data_dict)
         sendTlv(self.sock, tlv)
+        
         """server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
         if TLV_OK_TAG in server_ans:
             print(server_ans[TLV_OK_TAG])
@@ -174,16 +186,20 @@ class ClientDGA:
     
     def send_roll_command(self):
         """Send roll dice command to the server and anticipate positive response with roll result"""
-        while not self.roll_command_requested:
+        while True:
             print("Sending roll command")
             tlv = add_tlv_tag(TLV_ROLLDICE_TAG, self.nickname)
             sendTlv(self.sock, tlv)
-            self.roll_command_requested = True
-            server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
-            if TLV_ROLLDICERESULT_TAG in server_ans:
-                print("You rolled {}".format(server_ans[TLV_ROLLDICERESULT_TAG]))
-                print("Roll command has been successfully sent")
-                return server_ans[TLV_ROLLDICERESULT_TAG]
+
+            if self.wait_for_ack() and TLV_ROLLDICERESULT_TAG in self.current_msg:
+                print('Roll command succesfully requested. Server returned {}'.format(self.current_msg[TLV_ROLLDICERESULT_TAG]))
+                print(self.current_msg[TLV_OK_TAG])
+                return self.current_msg[TLV_ROLLDICERESULT_TAG]
+            else:
+                if TLV_FAIL_TAG in self.current_msg:
+                    print(self.current_msg[TLV_FAIL_TAG])       # print error message
+                
+                print("Message did not have {}".format(TLV_ROLLDICERESULT_TAG))
 
     def set_nickname(self):
         """Send nickname to the sever and anticipate positive response"""
