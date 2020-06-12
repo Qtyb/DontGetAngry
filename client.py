@@ -68,7 +68,7 @@ class ClientDGA:
             log_counter = 1000
             while self.running and not event.is_set():
                 if self.game_started:
-                    log_game_is_running(log_counter)
+                    self.log_game_is_running(log_counter)
                     if self.game_client_turn:
                         print("GAME client turn flag is set")
                         self.game_roll = self.send_roll_command()
@@ -173,8 +173,7 @@ class ClientDGA:
         figure = self.handle_ingame_figure_choice_input(msg)
         
         data_dict = {
-            tlv_tag: figure,
-            TLV_NICKNAME_TAG: self.nickname,
+            tlv_tag: figure
         }
 
         print("Place or Move command options chosen {}".format(data_dict))
