@@ -64,9 +64,11 @@ class ClientDGA:
             self.set_room()
             self.running = True
             self.print_options()
+
+            log_counter = 1000
             while self.running and not event.is_set():
                 if self.game_started:
-                    print("GAME flag is set") # !TODO handle game
+                    log_game_is_running(log_counter)
                     if self.game_client_turn:
                         print("GAME client turn flag is set")
                         self.game_roll = self.send_roll_command()
@@ -355,6 +357,12 @@ class ClientDGA:
         tlv = add_tlv_tag(TLV_START_MSG, "-")
         sendTlv(self.sock, tlv)
 
+    def log_game_is_running(self, counter):
+        if counter % 1000 == 0:
+            print("Game is running")
+        counter +=1
+
+
 
 def rcv_response(validate):
     def recv(s):
@@ -363,6 +371,8 @@ def rcv_response(validate):
             pass
 
     return recv
+
+
 
 
 if __name__ == "__main__":
