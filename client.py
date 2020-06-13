@@ -9,7 +9,6 @@ import sys
 import select
 import threading
 import queue
-import re
 from pytlv.TLV import *
 from game.logger_conf import client_logger
 
