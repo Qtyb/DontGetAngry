@@ -34,7 +34,6 @@ class ClientDGA:
         self.roll_command_requested = False
         self.pipeline = queue.Queue(maxsize=50)     # queue to exchange packets between threads
         self.current_msg = None                     # the msg to be handled (check wait_for_ack)
-        self.log_counter = 999
 
     def init(self):
         try:
@@ -65,10 +64,9 @@ class ClientDGA:
             self.set_room()
             self.running = True
             self.print_options()
-
             while self.running and not event.is_set():
                 if self.game_started:
-                    #print("GAME is running")
+                    # print("GAME flag is set") # !TODO handle game
                     if self.game_client_turn:
                         print("GAME client turn flag is set")
                         self.game_roll = self.send_roll_command()
@@ -171,37 +169,20 @@ class ClientDGA:
             self.game_roll = ans[TLV_ROLLDICERESULT_TAG]
             self.game_rolled = True
 
-    def get_ingame_options_tag(self):
-        while True:
-            self.print_ingame_options()
-            
-            msg = input(">> ")
-            if msg not in ('0', '1', '2'):
-                print("Input {} is invalid".format(msg))
-                continue
-
-            tlv_tag = self.handle_ingame_options_input(msg)
-            return tlv_tag
-
-    def get_ingame_figure(self):
-        while True:
-            self.print_ingame_figure_choice()
-            
-            msg = input(">> ")
-            if msg not in ('0', '1', '2', '3', '4'):
-                print("Input {} is invalid".format(msg))
-                continue
-
-            figure = self.handle_ingame_figure_choice_input(msg)
-            return figure
-
     def send_place_or_move_command(self):
         """Send place figure command to the server and anticipate positive response"""
-        tlv_tag = self.get_ingame_options_tag()
-        figure = self.get_ingame_figure()
+        #while True:
+        self.print_ingame_options()
+        msg = input(">> ")
+        tlv_tag = self.handle_ingame_options_input(msg)
+
+        self.print_ingame_figure_choice()
+        msg = input(">> ")
+        figure = self.handle_ingame_figure_choice_input(msg)
         
         data_dict = {
-            tlv_tag: figure
+            tlv_tag: figure,
+            TLV_NICKNAME_TAG: self.nickname,
         }
 
         print("Place or Move command options chosen {}".format(data_dict))
@@ -401,15 +382,14 @@ class ClientDGA:
         tlv = add_tlv_tag(TLV_START_MSG, "-")
         sendTlv(self.sock, tlv)
 
-    def rcv_response(validate):
-        def recv(s):
-            msg = recvText(s)
-            if validate(msg):
-                pass
 
-        return recv
+def rcv_response(validate):
+    def recv(s):
+        msg = recvText(s)
+        if validate(msg):
+            pass
 
-
+    return recv
 
 
 if __name__ == "__main__":

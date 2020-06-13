@@ -68,7 +68,11 @@ class ClientDGA:
 
             while self.running and not event.is_set():
                 if self.game_started:
+<<<<<<< HEAD
+                    # print("GAME flag is set") # !TODO handle game
+=======
                     #print("GAME is running")
+>>>>>>> origin
                     if self.game_client_turn:
                         print("GAME client turn flag is set")
                         self.game_roll = self.send_roll_command()
