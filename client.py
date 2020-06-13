@@ -9,6 +9,7 @@ import sys
 import select
 import threading
 import queue
+import re
 from pytlv.TLV import *
 from game.logger_conf import client_logger
 
@@ -161,16 +162,34 @@ class ClientDGA:
             self.game_roll = ans[TLV_ROLLDICERESULT_TAG]
             self.game_rolled = True
 
+    def get_ingame_options_tag(self):
+        while True:
+            self.print_ingame_options()
+            
+            msg = input(">> ")
+            if msg not in ('0', '1', '2'):
+                print("Input {} is invalid".format(msg))
+                continue
+
+            tlv_tag = self.handle_ingame_options_input(msg)
+            return tlv_tag
+
+    def get_ingame_figure(self):
+        while True:
+            self.print_ingame_figure_choice()
+            
+            msg = input(">> ")
+            if msg not in ('0', '1', '2', '3', '4'):
+                print("Input {} is invalid".format(msg))
+                continue
+
+            figure = self.handle_ingame_figure_choice_input(msg)
+            return figure
+
     def send_place_or_move_command(self):
         """Send place figure command to the server and anticipate positive response"""
-        #while True:
-        self.print_ingame_options()
-        msg = input(">> ")
-        tlv_tag = self.handle_ingame_options_input(msg)
-
-        self.print_ingame_figure_choice()
-        msg = input(">> ")
-        figure = self.handle_ingame_figure_choice_input(msg)
+        tlv_tag = self.get_ingame_options_tag()
+        figure = self.get_ingame_figure()
         
         data_dict = {
             tlv_tag: figure
