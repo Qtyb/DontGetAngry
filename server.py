@@ -12,34 +12,8 @@ import daemon
 connection_list = {}   # all sockets handled by server
 
 
-def is_ipv4(addr):
-    """ Checks if address is ipv4 """
-    try:
-        socket.inet_pton(socket.AF_INET, addr)
-    except OSError:
-        return False
-    return True
-
-
-def is_ipv6( addr):
-    """ Checks if address is ipv6 """
-    try:
-        socket.inet_pton(socket.AF_INET6, addr)
-    except OSError:
-        return False
-    return True
-
-
-def is_valid_port(port):
-    if 0 < int(port) < 65536:
-        return True
-    return False
-
-
 def get_all_nicknames():
-    print(connection_list.values())
     nicknames = [conn.cli.name for conn in connection_list.values() if isinstance(conn, Connection)]
-    print(nicknames)
     return nicknames
 
 
@@ -274,7 +248,11 @@ class Connection:
         sendTlv(self.sock, tlv)
 
     def snd_notification(self, flag, msg=""):       # handle OSError on higher level!
-        """Send message that contains control message"""
+        """
+        Send message that contains control message
+        @param flag:    (int)   : TLV header
+        @param msg:     (str)   : value of the tlv header
+        """
         tlv = add_tlv_tag(flag, msg)
         sendTlv(self.sock, tlv)
 

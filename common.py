@@ -1,5 +1,6 @@
 from settings import LENGTH_LEN
 from pytlv.TLV import *
+import socket
 
 # TLV
 TLV_NICKNAME_TAG = '0001'
@@ -146,4 +147,25 @@ def is_ok_answer(ans):
 # TLV functions
 
 
+def is_ipv4(addr):
+    """ Checks if address is ipv4 """
+    try:
+        socket.inet_pton(socket.AF_INET, addr)
+    except OSError:
+        return False
+    return True
 
+
+def is_ipv6( addr):
+    """ Checks if address is ipv6 """
+    try:
+        socket.inet_pton(socket.AF_INET6, addr)
+    except OSError:
+        return False
+    return True
+
+
+def is_valid_port(port):
+    if 0 < int(port) < 65536:
+        return True
+    return False

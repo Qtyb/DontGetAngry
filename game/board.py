@@ -37,21 +37,20 @@ class Board:
 
     def display_board(self):
         board_view = ""
-        for p in self.players:
-            board_view += "Board: "
-            i = 0
-            for f in self.fields:
-                if i in self.players_start_pos:
-                    index = self.players_start_pos.index(i)
-                    f = "P{}".format(index)
-                if isinstance(f, Figure):
-                    f += f.name                    
+        # for p in self.players:
+        # board_view += "Board: "
+        i = 0
+        for f in self.fields:
+            if i in self.players_start_pos:
+                index = self.players_start_pos.index(i)
+                f = "P{}".format(index)
+            if isinstance(f, Figure):
+                f += f.name
 
-                board_view += "|{}".format(f)
-                i += 1
+            board_view += "|{}".format(f)
+            i += 1
 
-            board_view += "|\n"
-
+        board_view += "|\n"
         return board_view
 
 

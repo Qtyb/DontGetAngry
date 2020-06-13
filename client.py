@@ -1,5 +1,5 @@
 import errno
-from socket import socket, AF_INET, SOCK_STREAM, timeout, error
+# from socket import socket, AF_INET, SOCK_STREAM, timeout, error
 import time
 from common import *
 from random import randint
@@ -37,7 +37,7 @@ class ClientDGA:
 
     def init(self):
         try:
-            self.sock = socket(AF_INET, SOCK_STREAM)
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.read_sockets.append(self.sock)
             self.read_sockets.append(sys.stdin)
         except OSError as e:
@@ -66,7 +66,7 @@ class ClientDGA:
             self.print_options()
             while self.running and not event.is_set():
                 if self.game_started:
-                    print("GAME flag is set") # !TODO handle game
+                    # print("GAME flag is set") # !TODO handle game
                     if self.game_client_turn:
                         print("GAME client turn flag is set")
                         self.game_roll = self.send_roll_command()
@@ -77,6 +77,10 @@ class ClientDGA:
                             self.game_client_turn = False
                             self.roll_command_requested = False
                             print("Player {} turn ended".format(self.nickname))
+
+                    else:
+                        # print("----------BLOCK_PLAYER-----------")
+                        self.wait_for_turn()
                 else:
                     msg = input("Press enter to refresh: ")
                     if event.is_set():  # server error
@@ -111,7 +115,12 @@ class ClientDGA:
             try:
                 server_ans = recvTlv(self.sock)
                 if TLV_OK_TAG in server_ans or TLV_FAIL_TAG in server_ans:    # ACK / NACK response - main thread is awaiting for it
-                    print("Message {} has ACK/NACK tag => saving to pipeline for future processing".format(server_ans))
+                    # print("Message {} has ACK/NACK tag => saving to pipeline for future processing".format(server_ans))
+                    self.pipeline.put(server_ans)
+                    continue
+
+                if TLV_NEWTURN_TAG in server_ans:
+                    client_logger.debug("Put TLV_NEWTURN_TAG msg into the pipeline")
                     self.pipeline.put(server_ans)
                     continue
                 
@@ -136,16 +145,17 @@ class ClientDGA:
 
         if TLV_STARTED_TAG in ans:
             print("Game started tag received")
+            print("Press enter to start a game")
             self.game_started = True
 
         if TLV_FINISHED_TAG in ans:
             self.game_started = False
 
-        if TLV_NEWTURN_TAG in ans:
-            print("TLV_NEWTURN_TAG received msg: {}, tag value: {}".format(ans, ans[TLV_NEWTURN_TAG]))
-            if self.nickname.upper() == ans[TLV_NEWTURN_TAG].upper():
-                print("Press enter to roll a dice")
-                self.game_client_turn = True
+        # if TLV_NEWTURN_TAG in ans:
+        #     print("TLV_NEWTURN_TAG received msg: {}, tag value: {}".format(ans, ans[TLV_NEWTURN_TAG]))
+        #     if self.nickname.upper() == ans[TLV_NEWTURN_TAG].upper():
+        #         print("Press enter to roll a dice")
+        #         self.game_client_turn = True
 
         if TLV_INFO_TAG in ans:
             print("\n" + remove_tlv_padding(ans[TLV_INFO_TAG]))
@@ -273,6 +283,23 @@ class ClientDGA:
             client_logger.debug("Received unknown tags: {}".format(get_types(msg)))
             raise OSError("Unknown tag received, while waiting for control tag")
 
+    def wait_for_turn(self):        # !TODO check collision with ack/nack tags
+        """ Waiting for NEWTURN tag and returns true if it is this player turn """
+        try:
+            msg = self.pipeline.get(timeout=1)      # timeout allows to close main thread when exception occurs in readloop
+        except queue.Empty:
+            return False
+
+        # print("--------------UNBLOCK------------------")
+        if TLV_NEWTURN_TAG in msg:
+            print("TLV_NEWTURN_TAG received msg: {}, tag value: {}".format(msg, msg[TLV_NEWTURN_TAG]))
+            if self.nickname.upper() == msg[TLV_NEWTURN_TAG].upper():
+                print("Press enter to roll a dice")
+                self.game_client_turn = True
+                return True
+        else:
+            client_logger.error("Received wrong tag: {}".format(msg))
+
 
     def print_options(self):
         interface_msg = """
@@ -367,11 +394,25 @@ def rcv_response(validate):
 
 if __name__ == "__main__":
     # remote server address
-    HOST = '127.0.0.1'
+    LOOPBACK = '127.0.0.1'
     PORT = 65432
 
-    MAXLINE = 1024
+    addr = LOOPBACK
+    port = PORT
+
+    if len(sys.argv) == 3:
+        addr = sys.argv[1]
+        port = sys.argv[2]
+
+        if not is_valid_port(port):
+            client_logger.error(f"Wrong port: {port}")
+            sys.exit(1)
+        port = int(port)
+
+    elif len(sys.argv) == 2:
+        addr = sys.argv[1]
+
     cli = ClientDGA()
     cli.init()
-    cli.connect(HOST, PORT)
+    cli.connect(addr, port)
     cli.run()

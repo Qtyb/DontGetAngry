@@ -25,3 +25,6 @@ class Figure:
         self.distance_to_target = -1
         self.field = -1
         self.target_field = -1
+
+    def __str__(self):
+        return self.name

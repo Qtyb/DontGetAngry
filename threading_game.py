@@ -40,9 +40,9 @@ class GameThread(threading.Thread):
             self.player_name_to_connection[i.cli.name] = index
             index += 1
 
-
         print("player_names: {}".format(player_names))
         self.game = Game(player_names, 24) #Board should scale but will not, because it is not important :)
+        # print(self.game.game_board.display_board())
 
     def run(self):
         try:
@@ -56,6 +56,7 @@ class GameThread(threading.Thread):
                     self.current_player = player
                     self.send_new_turn_started(player.name)
                     self.game.start_player_turn(player)
+                    self.snd_player_status(player)
 
                     roll = self.wait_dice_message()
                     print("Player {} rolled {}".format(self.current_player.name, roll))
@@ -156,6 +157,11 @@ class GameThread(threading.Thread):
             tlv = add_tlv_tag(TLV_INFO_TAG, msg)
             sendTlv(conn.sock, tlv)
 
+    def snd_player_status(self, player):
+        conn = self.connections[self.player_name_to_connection[player.name]]
+        conn.snd_notification(TLV_INFO_TAG, self.game.get_player_status(player))
+        logger.debug("Send player status notification")
+
     def get_game_status(self):
         running = "YES" if self.running else "NO"
         msg = """
@@ -193,7 +199,7 @@ class GameThread(threading.Thread):
         """Send message that contains control message"""
         tlv = add_tlv_tag(tag, msg)
         sendTlv(sock, tlv)
-        print("message has been sent")
+        # print("message has been sent")
 
     def handle_msg(self, sock):
         if self.connections[self.next_player].sock == sock:
@@ -208,4 +214,5 @@ class GameThread(threading.Thread):
                 self.msg_handlers[type]()
             except KeyError as e:
                 print("[ERROR] cannot parse {}: {}".format(type, e))
+
     

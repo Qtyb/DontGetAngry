@@ -89,3 +89,20 @@ class Game:
                     reveal_name(player.start_figures), reveal_name(player.finished_figures)))
                 # debug output of board fields
                 logger.debug("Board fields after turn: {}".format(reveal_name(self.game_board.fields)))
+
+    def get_player_status(self, player):
+        """ Returns information about player status in the game (figures, board).
+        @param player:      (Player)
+        @return:            (str)       : player status description
+        """
+        start_figures_descr = ", ".join([str(fig) for fig in player.start_figures])
+        finish_figures_descr = ", ".join([str(fig) for fig in player.finished_figures])
+        board_descr = self.game_board.display_board().replace("|", "/")
+
+        description = """
+        Figures have not placed yet: {}
+        Figures finished: {}
+        Board: 
+        {}
+        """.format(start_figures_descr, finish_figures_descr, board_descr)
+        return description
