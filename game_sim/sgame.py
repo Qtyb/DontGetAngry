@@ -1,6 +1,6 @@
 import random
-from .classes import Board, Player
-from .logger_conf import logger, reveal_name
+from classes import Board, Player
+from logger_conf import logger, reveal_name
 
 
 class Game:
@@ -59,6 +59,9 @@ class Game:
 
                 logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(reveal_name(player.start_figures), reveal_name(player.finished_figures)))
                 # debug output of board fields
-                logger.debug("Board fields after turn: {}".format(reveal_name(self.game_board.fields)))
+                logger.debug("Board fields after turn: {}".format(self.game_board.display_board()))
 
 
+if __name__ == "__main__":
+    game = Game(4, 40)
+    game.start_game()

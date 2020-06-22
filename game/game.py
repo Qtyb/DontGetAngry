@@ -97,7 +97,7 @@ class Game:
         """
         start_figures_descr = ", ".join([str(fig) for fig in player.start_figures])
         finish_figures_descr = ", ".join([str(fig) for fig in player.finished_figures])
-        board_descr = self.game_board.display_board().replace("|", "/")
+        board_descr = self.game_board.display_board()
 
         description = """
         Figures have not placed yet: {}

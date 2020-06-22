@@ -20,10 +20,8 @@ class ClearClientException(Error):
 class YouAreAloneException(Error):  # !TODO change name
     pass
 
-class UnsubscribeException(Error):
-    pass
 
-class ChangeStateException(Error):
+class UnsubscribeException(Error):
     pass
 
 class UnknownTagException(Error):

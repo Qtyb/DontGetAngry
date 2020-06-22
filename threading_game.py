@@ -183,7 +183,7 @@ class GameThread(threading.Thread):
     def send_new_turn_started(self, player_name):
         print("send_new_turn_started for player {}".format(player_name))
         for conn in self.connections:
-            conn.snd_notification(TLV_NEWTURN_TAG, player_name)#{}\n".format(self.game.game_board.display_board()))
+            conn.snd_notification(TLV_NEWTURN_TAG, player_name) #{}\n".format(self.game.game_board.display_board()))
 
     def send_game_started(self):
         for conn in self.connections:

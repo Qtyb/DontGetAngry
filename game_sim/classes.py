@@ -34,6 +34,22 @@ class Board:
             self.next_start_index += int(self.field_amount / self.player_amount)
             logger.info("registered player {}".format(player.id))
 
+    def display_board(self):
+        board_view = ""
+        i = 0
+        for f in self.fields:
+            if i in self.players_start_pos:
+                index = self.players_start_pos.index(i)
+                f = "P{}".format(index)
+            if isinstance(f, Figure):
+                f = f.name
+
+            board_view += "|{}".format(f)
+            i += 1
+
+        board_view += "|\n"
+        return board_view
+
 
 class Figure:
     def __init__(self, name):

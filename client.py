@@ -9,13 +9,19 @@ import sys
 import select
 import threading
 import queue
+import os
 from pytlv.TLV import *
 from game.logger_conf import client_logger
 
 
-def sig_alarm_handler(signum, stack):
-    print("Received SIGALRM: ", signum, " ", stack)
-    raise ChangeStateException()
+def flush_input():
+    try:
+        import msvcrt
+        while msvcrt.kbhit():
+            msvcrt.getch()
+    except ImportError:
+        import sys, termios    #for linux/unix
+        termios.tcflush(sys.stdin, termios.TCIOFLUSH)
 
 
 class ClientDGA:
@@ -53,6 +59,7 @@ class ClientDGA:
 
     def close(self):
         self.sock.close()
+        flush_input()
         sys.exit(-1)
 
     def run(self):
@@ -70,7 +77,7 @@ class ClientDGA:
                 if self.game_started:
                     #print("GAME is running")
                     if self.game_client_turn:
-                        print("GAME client turn flag is set")
+                        input("Press enter to roll a dice")
                         self.game_roll = self.send_roll_command()
                         if self.game_roll is not None:
                             print("GAME roll is not null")
@@ -81,10 +88,10 @@ class ClientDGA:
                             print("Player {} turn ended".format(self.nickname))
 
                     else:
-                        # print("----------BLOCK_PLAYER-----------")
                         self.wait_for_turn()
                 else:
-                    msg = input("Press enter to refresh: ")
+                    rs, _, _ = select.select([sys.stdin], [], [], 1)
+
                     if event.is_set():  # server error
                         break
 
@@ -92,27 +99,39 @@ class ClientDGA:
                         client_logger.debug("Game started, ignore input")
                         continue
 
-                    if not msg:   # enter pressed
+                    if not rs:          # timeout with no input
                         continue
+
+                    msg = sys.stdin.readline()     # !TODO check for buffer overflow
+
+                    if msg[-1] == '\n':     # remove newline character
+                        msg = msg[:-1]
+
+                    if not msg:             # enter pressed
+                        print("Press enter to refresh: ", end="", flush=True)      # terminal is waiting for new line
+                        continue
+
                     self.handle_options_input(msg)
             # self.close()  # sys.exit() raises SystemExit so finally will be executed
             raise Exception()
         except KeyboardInterrupt:
             client_logger.error("Keyboard interrupt")
+            self.running = False
+            self.close()
         except (OSError, EOFError) as e:
             print("Server error")
             client_logger.error("Server error: " + str(e))
+            self.running = False
+            self.close()
         except Exception as e:
             print("Server error")
             client_logger.error("Exception: " + str(e))
-        finally:
-            print("Closing...")
             self.running = False
             self.close()
-            sys.exit(-1)
 
     def read_loop(self, event):        # !TODO timeout to signal
         """ Thread that reads messages sent by the server. """
+
         while True:
             try:
                 server_ans = recvTlv(self.sock)
@@ -128,12 +147,14 @@ class ClientDGA:
                 
                 print("Message {} is a request from the server".format(server_ans))
                 self.handle_answer(server_ans)      # received msg is not a control msg
-            except (OSError, EOFError, ChangeStateException) as e:
+            except (OSError, EOFError) as e:
                 client_logger.error("Error while reading data: " + str(e))
+                os.kill(os.getpid(), signal.SIGINT)     # should raise Keyboard interrupt in the main thread
                 event.set()  # alarm main thread that program should exit
                 return
             except Exception as e:
                 client_logger.error("Other error while reading data: " + str(e))
+                os.kill(os.getpid(), signal.SIGINT)
                 event.set()  # alarm main thread that program should exit
                 return
 
@@ -153,12 +174,6 @@ class ClientDGA:
         if TLV_FINISHED_TAG in ans:
             self.game_started = False
 
-        # if TLV_NEWTURN_TAG in ans:
-        #     print("TLV_NEWTURN_TAG received msg: {}, tag value: {}".format(ans, ans[TLV_NEWTURN_TAG]))
-        #     if self.nickname.upper() == ans[TLV_NEWTURN_TAG].upper():
-        #         print("Press enter to roll a dice")
-        #         self.game_client_turn = True
-
         if TLV_INFO_TAG in ans:
             print("\n" + remove_tlv_padding(ans[TLV_INFO_TAG]))
 
@@ -174,7 +189,7 @@ class ClientDGA:
     def get_ingame_options_tag(self):
         while True:
             self.print_ingame_options()
-            
+
             msg = input(">> ")
             if msg not in ('0', '1', '2'):
                 print("Input {} is invalid".format(msg))
@@ -278,6 +293,8 @@ class ClientDGA:
             self.send_start_msg()
         elif msg.upper().strip() in ["4", "HELP", "INFO"]:
             self.print_options()
+        elif msg.upper().strip() in ["5", "EXIT"]:
+            self.close()
 
     def wait_for_ack(self):
         """
@@ -309,16 +326,17 @@ class ClientDGA:
         except queue.Empty:
             return False
 
-        # print("--------------UNBLOCK------------------")
         if TLV_NEWTURN_TAG in msg:
-            print("TLV_NEWTURN_TAG received msg: {}, tag value: {}".format(msg, msg[TLV_NEWTURN_TAG]))
-            if self.nickname.upper() == msg[TLV_NEWTURN_TAG].upper():
-                print("Press enter to roll a dice")
+            # print("TLV_NEWTURN_TAG received msg: {}, tag value: {}".format(msg, msg[TLV_NEWTURN_TAG]))
+            rcvd_nickname = msg[TLV_NEWTURN_TAG]
+            if self.nickname.upper() == rcvd_nickname.upper():
                 self.game_client_turn = True
+                flush_input()
                 return True
+            else:
+                print(f"Player {rcvd_nickname} turn")
         else:
             client_logger.error("Received wrong tag: {}".format(msg))
-
 
     def print_options(self):
         interface_msg = """
@@ -326,6 +344,7 @@ class ClientDGA:
         2. GET_USER_INFO : get information about your status
         3. START : start a game, available only if you joined a room with at least other player
         4. HELP : print options
+        5. EXIT : shutdown program
         """
         print(interface_msg)
 
@@ -400,16 +419,6 @@ class ClientDGA:
     def send_start_msg(self):
         tlv = add_tlv_tag(TLV_START_MSG, "-")
         sendTlv(self.sock, tlv)
-
-    def rcv_response(validate):
-        def recv(s):
-            msg = recvText(s)
-            if validate(msg):
-                pass
-
-        return recv
-
-
 
 
 if __name__ == "__main__":

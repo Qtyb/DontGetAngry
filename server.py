@@ -158,7 +158,6 @@ class Connection:
         self.cli = cli
         self.sock = cli_sock
         self.room_manager = RoomManager()
-        self.state = INIT
         self.received_tlv = None
         self.msg_handlers = {
             TLV_NICKNAME_TAG: self.recv_nickname,

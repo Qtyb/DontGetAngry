@@ -1,4 +1,4 @@
-from settings import LENGTH_LEN
+from settings import LENGTH_LEN, PADDING_CHAR
 from pytlv.TLV import *
 import socket
 
@@ -80,19 +80,19 @@ def create_tlv():
    return TLV(TLV_TAGS)
 
 def isTlvMsgValid(msg):
-    if "|" in msg:
+    if PADDING_CHAR in msg:
         return False
 
     return True
 
 def add_tlv_padding(msg):
     if divmod(len(msg), 2)[1] == 1:
-        msg = "|" + msg
+        msg = PADDING_CHAR + msg
 
     return msg
 
 def remove_tlv_padding(msg):
-    return msg.replace("|", "")
+    return msg.replace(PADDING_CHAR, "")
 
 def add_tlv_tag(tag, msg, tlv = None):
     if isTlvMsgValid(msg) == False:
