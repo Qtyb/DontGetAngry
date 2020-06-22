@@ -1,6 +1,6 @@
 import random
-from game_sim.classes import Board, Player
-from game_sim.logger_conf import logger, reveal_name
+from .classes import Board, Player
+from .logger_conf import logger, reveal_name
 
 
 class Game:
@@ -61,7 +61,4 @@ class Game:
                 # debug output of board fields
                 logger.debug("Board fields after turn: {}".format(reveal_name(self.game_board.fields)))
 
-
-game = Game(4, 40)
-game.start_game()
 
