@@ -63,55 +63,7 @@ class Player:
         removed_figure = self.start_figures.pop()
         removed_figure.place(board)
         board.fields[start_pos] = removed_figure
-
-    def select_figure(self, board, move_amount):
-        """
-        method to select the most suitable figure
-        """
-        selected_figure = "undefined"
-        for field in board.fields:
-            if hasattr(field, "name"):
-                if self.name in field.name:
-                    # set figure
-                    figure = field
-                    # get field of figure
-                    figure.field = board.fields.index(figure)
-                    # check if figure can finish
-                    if figure.distance_to_target <= move_amount:
-                        # determine free slots in finished_figures
-                        free_slots = []
-                        for i in range(len(self.finished_figures)):
-                            if self.finished_figures[i] == "0":
-                                free_slots.append(i)
-                        # return figure if free slot can be reached by move_amount
-                        for slot in free_slots:
-                            if abs(figure.distance_to_target - move_amount) == slot:
-                                figure.finish_slot = slot
-                                logger.info(
-                                    "Player {} reached the finish with figure {}!".format(self.name, figure.name))
-                                return figure
-                    else:
-                        # calc target field  of figure
-                        figure.target_field = figure.field + move_amount
-                        # handle field loop
-                        if figure.target_field > board.field_amount - 1:
-                            diff = board.field_amount - figure.field
-                            figure.target_field = move_amount - diff
-                        # check if more than one of player's figures on field
-                        if len(self.start_figures) < 3:
-                            # return figure if it has a chance to ban other figures
-                            if hasattr(board.fields[figure.target_field], "name") and self.name not in board.fields[figure.target_field].name:
-                                return figure
-                            # determine figure with closest distance to target
-                            if hasattr(selected_figure, "distance_to_target"):
-                                if figure.distance_to_target < selected_figure.distance_to_target:
-                                    selected_figure = figure
-                            else:
-                                selected_figure = figure
-                        else:
-                            return figure
-
-        return selected_figure
+        
 
     def move_figure(self, board, move_amount, selected_figure):
         """
@@ -119,7 +71,7 @@ class Player:
         """
 
         # select figure
-        figure = self.figures[selected_figure-1]
+        figure = self.figures[int(selected_figure)-1]
         for field in board.fields:
             if hasattr(field, "name"):
                 if figure.name in field.name:
