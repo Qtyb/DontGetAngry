@@ -121,14 +121,14 @@ def build_tlv_with_tags(data_dict):
             value = serialize_list(value)
         parsed_dict[tag] = add_tlv_padding(value)
 
-    print("Build tlv with dictionary after padding: {}".format(parsed_dict))
+    #print("Build tlv with dictionary after padding: {}".format(parsed_dict))
     
     tlv.build(parsed_dict)
     return tlv
 
 def sendTlv(sock, tlv):
     message_to_send = tlv.tlv_string
-    print("Sending TLV:", message_to_send)
+    #print("Sending TLV:", message_to_send)
 
     sendText(sock, create_msg(message_to_send))  
 

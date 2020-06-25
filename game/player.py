@@ -100,14 +100,19 @@ class Player:
                     figured.field = board.fields.index(figured)
                     # check if figure can finish
                     if figured.distance_to_target <= move_amount:
+                        logger.debug("figure distance to target: [{}] is lower or equal move_amount: [{}]".format(figured.distance_to_target, move_amount))
                         # determine free slots in finished_figures
                         free_slots = []
                         for i in range(len(self.finished_figures)):
                             if self.finished_figures[i] == "0":
                                 free_slots.append(i)
+                                logger.debug("Slot {} is free".format(i))
+
                         for slot in free_slots:
                             if abs(figured.distance_to_target - move_amount) == slot:
                                 figured.finish_slot = slot
+                                logger.debug("Figure finish slot = [{}]".format(figured.finish_slot))
+
                     else:
                         # calc target field  of figure
                         figured.target_field = figured.field + move_amount

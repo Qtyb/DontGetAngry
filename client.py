@@ -90,7 +90,7 @@ class ClientDGA:
         try:
             read_thread.start()
             self.set_nickname()
-            print("My nickname is ", self.nickname)
+            client_logger.info("My nickname is {}".format(self.nickname))
             self.set_room()
             self.running = True
             self.print_options()
@@ -103,7 +103,7 @@ class ClientDGA:
                         input("Press enter to roll a dice")
                         self.send_roll_command()    # blocks
                         if self.skip_turn:
-                            print("SKIP TURN")
+                            client_logger.info("Skipping turn")
                         else:
                             self.send_place_or_move_command()
                         # if self.game_roll is not None:      # can be?
@@ -112,7 +112,7 @@ class ClientDGA:
                         self.game_roll = None
                         self.game_client_turn = False
                         self.roll_command_requested = False
-                        print("Player {} turn ended".format(self.nickname))
+                        client_logger.info("Player {} turn ended".format(self.nickname))
 
                     else:
                         self.wait_for_turn()

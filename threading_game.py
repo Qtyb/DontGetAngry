@@ -63,12 +63,12 @@ class GameThread(threading.Thread):
                     if self.skip_turn:  # player cannot move
                         continue
                     # -----------------
-                    print("Player {} rolled {}".format(self.current_player.name, roll))
+                    logger.info("Player {} rolled {}".format(self.current_player.name, roll))
                     player_wants_place_figure = self.wait_want_place_figure()
                     if player_wants_place_figure:
-                        print("Player {} chose to PLACE figure: {}".format(self.current_player.name, self.place_figure))
+                        logger.info("Player {} chose to PLACE figure: {}".format(self.current_player.name, self.place_figure))
                     else:
-                        print("Player {} chose to MOVE figure: {}".format(self.current_player.name, self.move_figure))
+                        logger.info("Player {} chose to MOVE figure: {}".format(self.current_player.name, self.move_figure))
 
                     # if player.has_figures_on_board(self.game.game_board):
                     # print("Player {} has figures on board".format(player.name))

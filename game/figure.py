@@ -16,7 +16,10 @@ class Figure:
         """
         method to move a figure
         """
-        self.distance_to_target = self.distance_to_target - move_amount
+        if self.distance_to_target - move_amount > 0:
+            self.distance_to_target = self.distance_to_target - move_amount
+        else: 
+            print("Figure {} not moved because distance to target would be lesser than 1".format(self.name))
 
     def ban(self):
         """
