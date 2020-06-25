@@ -98,11 +98,12 @@ class Game:
         start_figures_descr = ", ".join([str(fig) for fig in player.start_figures])
         finish_figures_descr = ", ".join([str(fig) for fig in player.finished_figures])
         board_descr = self.game_board.display_board()
+        start_position_descr = self.game_board.display_starting_position()
 
         description = """
         Figures have not placed yet: {}
         Figures finished: {}
-        Board: 
-        {}
-        """.format(start_figures_descr, finish_figures_descr, board_descr)
+        Board: {} {}
+        """.format(start_figures_descr, finish_figures_descr, board_descr, start_position_descr)
+
         return description
