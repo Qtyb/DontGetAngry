@@ -246,6 +246,12 @@ class Connection:
         tlv = build_tlv_with_tags(data_dict)
         sendTlv(self.sock, tlv)
 
+    def snd_ack_dict_notification(self, data_dict):
+        """ Send message with tags included in data_dict with positive ack """
+        data_dict[TLV_OK_TAG] = "ok"
+        tlv = build_tlv_with_tags(data_dict)
+        sendTlv(self.sock, tlv)
+
     def snd_notification(self, flag, msg=""):       # handle OSError on higher level!
         """
         Send message that contains control message

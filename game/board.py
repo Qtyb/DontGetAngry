@@ -35,13 +35,15 @@ class Board:
             self.next_start_index += int(self.field_amount / self.player_amount)
             logger.info("registered player {}".format(player.id))
 
+    # !TODO all board fields should be numbered 0 .. len(board), pass starting position to the player
     def display_board(self):
         board_view = ""
         i = 0
+        print("Display board: " + str(self.fields))
         for f in self.fields:
-            if i in self.players_start_pos:
-                index = self.players_start_pos.index(i)
-                f = "P{}".format(index)
+            # if i in self.players_start_pos:
+            #     index = self.players_start_pos.index(i)
+            #     f = "P{}".format(index)
             if isinstance(f, Figure):
                 f = str(f)
 

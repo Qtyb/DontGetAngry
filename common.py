@@ -1,4 +1,4 @@
-from settings import LENGTH_LEN, PADDING_CHAR
+from settings import LENGTH_LEN, PADDING_CHAR, LIST_DELIMITER
 from pytlv.TLV import *
 import socket
 
@@ -24,8 +24,13 @@ TLV_MOVEORPLACE_TAG = '5012'
 TLV_PLACEFIGURE_TAG = '5013'
 TLV_MOVEFIGURE_TAG = '5014'
 
+TLV_OPTION_PUT = "6000"
+TLV_OPTION_MOVE = "6001"
+TLV_OPTION_SKIP = "6002"
+
 TLV_TAGS = [TLV_NICKNAME_TAG, TLV_ROOM_TAG, TLV_ROLLDICE_TAG, TLV_NEWTURN_TAG, TLV_PLACEFIGURE_TAG, TLV_MOVEFIGURE_TAG, TLV_INFO_TAG, TLV_OK_TAG, TLV_FAIL_TAG,
-            TLV_ROLLDICERESULT_TAG, TLV_GET_ROOMS, TLV_START_MSG, TLV_STARTED_TAG, TLV_FINISHED_TAG, TLV_MOVEORPLACE_TAG, TLV_GET_USERINFO]
+            TLV_ROLLDICERESULT_TAG, TLV_GET_ROOMS, TLV_START_MSG, TLV_STARTED_TAG, TLV_FINISHED_TAG, TLV_MOVEORPLACE_TAG, TLV_GET_USERINFO,
+            TLV_OPTION_PUT, TLV_OPTION_MOVE, TLV_OPTION_SKIP]
 
 # TLV END
 
@@ -112,9 +117,11 @@ def build_tlv_with_tags(data_dict):
     #print("Build tlv with dictionary: {}".format(data_dict))
     parsed_dict = {}
     for tag, value in data_dict.items():
+        if isinstance(value, list):
+            value = serialize_list(value)
         parsed_dict[tag] = add_tlv_padding(value)
 
-    #print("Build tlv with dictionary after padding: {}".format(parsed_dict))
+    print("Build tlv with dictionary after padding: {}".format(parsed_dict))
     
     tlv.build(parsed_dict)
     return tlv
@@ -169,3 +176,13 @@ def is_valid_port(port):
     if 0 < int(port) < 65536:
         return True
     return False
+
+
+def serialize_list(l):
+    """ list -> string (PADDING_CHAR) delimiter"""
+    return f"{LIST_DELIMITER}".join(l)
+
+
+def deserialize_list(string):
+    """ string -> list PADDING_CHAR) split"""
+    return string.split(LIST_DELIMITER)

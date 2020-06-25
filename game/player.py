@@ -33,6 +33,25 @@ class Player:
             if figure in board.fields:
                 return True
 
+    def has_starting_figure(self):
+        """ Returns True if player has figure to place onto the board """
+        if len(self.start_figures) > 0:
+            return True
+        return False
+
+    def get_figures_on_board(self):
+        """ Returns list of figures names that are on game board """
+        board_figures = []
+        for figure in self.figures:
+            if figure not in self.start_figures and figure not in self.finished_figures:
+                board_figures.append(str(figure))
+        return board_figures
+
+    def get_starting_figures(self):
+        """ Returns list of figures names that are at the starting position """
+        return [str(fig) for fig in self.start_figures]
+
+
     def grab_figures_from_cemetery(self, board):
         """
         grab players figure(s) from the boards figure cemetery and reset them to figure start pit
@@ -119,7 +138,8 @@ class Player:
         """
 
         # select figure
-        figure = self.figures[selected_figure-1]
+        # figure = self.figures[int(selected_figure)-1]
+        figure = self.find_figure_by_name(selected_figure)
         for field in board.fields:
             if hasattr(field, "name"):
                 if figure.name in field.name:
@@ -177,3 +197,10 @@ class Player:
         board.fields[figure.field] = "0"
         self.finished_figures[figure.finish_slot] = figure
         logger.info("Player {} reached the finish with figure {}!".format(self.name, figure.name))
+
+    def find_figure_by_name(self, fig_name):
+        for fig in self.figures:
+            if fig.name == fig_name:
+                return fig
+
+        raise Exception(f"Figure with name {fig_name} does not exists")

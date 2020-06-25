@@ -14,6 +14,20 @@ from pytlv.TLV import *
 from game.logger_conf import client_logger
 
 
+# check if it matches print_options
+options_mapping = {
+    TLV_OPTION_MOVE: "1",
+    TLV_OPTION_PUT: "2",
+}
+
+
+def option_parsing(tlv_msg):
+    """
+    Gets tlv message and returns dictionary {TLV: number} of player possible options.
+    """
+    return {tag: options_mapping[tag] for tag in tlv_msg if tag in options_mapping}
+
+
 def flush_input():
     try:
         import msvcrt
@@ -28,10 +42,7 @@ class ClientDGA:
 
     def __init__(self):
         self.sock = None
-        self.state = None
         self.running = False
-        self.read_sockets = []
-        self.close_flag = False
         self.nickname = ""
         self.game_started = False
         self.game_client_turn = False
@@ -41,16 +52,23 @@ class ClientDGA:
         self.pipeline = queue.Queue(maxsize=50)     # queue to exchange packets between threads
         self.current_msg = None                     # the msg to be handled (check wait_for_ack)
         self.log_counter = 999
+        self.player_options = {}        # tlv message that indicates player possible options
+        self.option_chosen = None       # tlv tag that indicates player's choice
+        self.skip_turn = False
 
     def init(self):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.read_sockets.append(self.sock)
-            self.read_sockets.append(sys.stdin)
         except OSError as e:
             client_logger.error("socket error: {}".format(str(e)))
 
     def connect(self, addr, port):
+        """
+        Try to connect to the server. Exit on failure.
+        @param addr:    (string)    : IPv4 or IPv6 address, dotted form
+        @param port:    (int)       : port number
+        @return:        (None)
+        """
         try:
             self.sock.connect((addr, port))
         except OSError as e:
@@ -58,6 +76,10 @@ class ClientDGA:
             sys.exit()
 
     def close(self):
+        """
+        Close client socket, flush input buffer and close program.
+        Reading thread is a daemon so it should close with the main thread.
+        """
         self.sock.close()
         flush_input()
         sys.exit(-1)
@@ -75,17 +97,22 @@ class ClientDGA:
 
             while self.running and not event.is_set():
                 if self.game_started:
-                    #print("GAME is running")
+                    self.reset_vars()
+
                     if self.game_client_turn:
                         input("Press enter to roll a dice")
-                        self.game_roll = self.send_roll_command()
-                        if self.game_roll is not None:
-                            print("GAME roll is not null")
+                        self.send_roll_command()    # blocks
+                        if self.skip_turn:
+                            print("SKIP TURN")
+                        else:
                             self.send_place_or_move_command()
-                            self.game_roll = None
-                            self.game_client_turn = False
-                            self.roll_command_requested = False
-                            print("Player {} turn ended".format(self.nickname))
+                        # if self.game_roll is not None:      # can be?
+                        # print("GAME roll is not null")
+
+                        self.game_roll = None
+                        self.game_client_turn = False
+                        self.roll_command_requested = False
+                        print("Player {} turn ended".format(self.nickname))
 
                     else:
                         self.wait_for_turn()
@@ -102,7 +129,7 @@ class ClientDGA:
                     if not rs:          # timeout with no input
                         continue
 
-                    msg = sys.stdin.readline()     # !TODO check for buffer overflow
+                    msg = sys.stdin.readline()
 
                     if msg[-1] == '\n':     # remove newline character
                         msg = msg[:-1]
@@ -115,7 +142,7 @@ class ClientDGA:
             # self.close()  # sys.exit() raises SystemExit so finally will be executed
             raise Exception()
         except KeyboardInterrupt:
-            client_logger.error("Keyboard interrupt")
+            client_logger.warning("Keyboard interrupt")
             self.running = False
             self.close()
         except (OSError, EOFError) as e:
@@ -135,6 +162,7 @@ class ClientDGA:
         while True:
             try:
                 server_ans = recvTlv(self.sock)
+
                 if TLV_OK_TAG in server_ans or TLV_FAIL_TAG in server_ans:    # ACK / NACK response - main thread is awaiting for it
                     # print("Message {} has ACK/NACK tag => saving to pipeline for future processing".format(server_ans))
                     self.pipeline.put(server_ans)
@@ -191,29 +219,51 @@ class ClientDGA:
             self.print_ingame_options()
 
             msg = input(">> ")
+            client_logger.debug("Player input: " + msg)
             if msg not in ('0', '1', '2'):
                 print("Input {} is invalid".format(msg))
                 continue
 
+            client_logger.debug("Player options: " + str(self.player_options))
+            if msg not in self.player_options.values():
+                print("You cannot do that!")        # !TODO print description
+                continue
+
             tlv_tag = self.handle_ingame_options_input(msg)
+            client_logger.debug("Return ingame option: "+  str(tlv_tag))
             return tlv_tag
 
     def get_ingame_figure(self):
+        """ Should be called only if player chooses MOVE option """
         while True:
-            self.print_ingame_figure_choice()
+            figures = self.current_msg[TLV_OPTION_MOVE]  # only MOVE allowed
+            client_logger.debug("Figures before deserialization: " + str(figures))
+            figures = deserialize_list(figures)
+            client_logger.debug("Figures after deserialization: " + str(figures))
+            figures = {str(num + 1): fig for num, fig in enumerate(figures)}     # num: fig_name dict
+            # client_logger.debug("Figures dict: " + str(figures))
+            self.print_ingame_figure_choice(figures)
             
             msg = input(">> ")
-            if msg not in ('0', '1', '2', '3', '4'):
+            msg = msg.strip()
+            # client_logger.debug(f"Input: {msg}")
+            client_logger.debug(f"figures: {str(figures)}")
+            # client_logger.debug(f"true/false: {msg not in figures}")
+            if msg not in figures and msg != "0":
                 print("Input {} is invalid".format(msg))
                 continue
-
-            figure = self.handle_ingame_figure_choice_input(msg)
+            figure = figures[msg]
+            # figure = self.handle_ingame_figure_choice_input(msg)
             return figure
 
     def send_place_or_move_command(self):
         """Send place figure command to the server and anticipate positive response"""
         tlv_tag = self.get_ingame_options_tag()
-        figure = self.get_ingame_figure()
+        self.option_chosen = tlv_tag
+        figure = "0"        # default value, if player wants to put figure we do not need information about figure number
+        client_logger.debug("Options chosen: " + tlv_tag)
+        if tlv_tag == TLV_MOVEFIGURE_TAG:
+            figure = self.get_ingame_figure()
         
         data_dict = {
             tlv_tag: figure
@@ -236,9 +286,14 @@ class ClientDGA:
             sendTlv(self.sock, tlv)
 
             if self.wait_for_ack() and TLV_ROLLDICERESULT_TAG in self.current_msg:
-                print('Roll command succesfully requested. Server returned {}'.format(self.current_msg[TLV_ROLLDICERESULT_TAG]))
-                print(self.current_msg[TLV_OK_TAG])
-                return self.current_msg[TLV_ROLLDICERESULT_TAG]
+                client_logger.debug("ROLLDICE result: " + str(self.current_msg))
+                print('Roll command successfully requested. Server returned {}'.format(self.current_msg[TLV_ROLLDICERESULT_TAG]))
+                if TLV_OPTION_SKIP in self.current_msg:
+                    self.skip_turn = True
+                    return
+                self.player_options = option_parsing(self.current_msg)
+                return
+                # return self.current_msg[TLV_ROLLDICERESULT_TAG]
             else:
                 if TLV_FAIL_TAG in self.current_msg:
                     print(self.current_msg[TLV_FAIL_TAG])       # print error message
@@ -349,22 +404,29 @@ class ClientDGA:
         print(interface_msg)
 
     def handle_ingame_options_input(self, msg):
-        if msg.upper().strip() in ["1", "MOVE_FIGURE"]:
-            print("MOVE FIGURE CHOSEN")
-            return TLV_MOVEFIGURE_TAG
-        elif msg.upper().strip() in ["2", "PLACE_FIGURE"]:
+        if msg.upper().strip() in [options_mapping[TLV_OPTION_PUT], "PLACE_FIGURE"]:
             print("PLACE FIGURE CHOSEN")
             return TLV_PLACEFIGURE_TAG
+
+        elif msg.upper().strip() in [options_mapping[TLV_OPTION_MOVE], "MOVE_FIGURE"]:
+            print("MOVE FIGURE CHOSEN")
+            return TLV_MOVEFIGURE_TAG
+
         elif msg.upper().strip() in ["0", "EXIT"]:
             print("EXIT CHOSEN")
             self.handle_exit_command()
 
     def print_ingame_options(self):
-        interface_msg = """
-        1. MOVE_FIGURE : move figure
-        2. PLACE_FIGURE : place figure
-        0. EXIT : leave game
-        """
+        """ Print player options based on msg received from the server"""
+        interface_msg = ""
+
+        if TLV_OPTION_MOVE in self.player_options:
+            interface_msg += f"{options_mapping[TLV_OPTION_MOVE]}. MOVE FIGURE\n"
+
+        if TLV_OPTION_PUT in self.player_options:
+            interface_msg += f"{options_mapping[TLV_OPTION_PUT]}. PLACE FIGURE\n"
+
+        interface_msg += "0. EXIT : leave game"
         print(interface_msg)
 
     def handle_ingame_figure_choice_input(self, msg):
@@ -384,14 +446,16 @@ class ClientDGA:
             print("Exit chosen")
             self.handle_exit_command()
 
-    def print_ingame_figure_choice(self):
-        interface_msg = """
-        1. Figure 1
-        2. Figure 2
-        3. Figure 3
-        4. Figure 4
-        0. EXIT : leave game
+    def print_ingame_figure_choice(self, figures):
+        """ Print figures that can be moved by the player
+        @param figures:     (dict)  : num: figure_name
         """
+        interface_msg = ""
+        client_logger.debug(f"Figures: {str(figures)}")
+        for num, figure in figures.items():
+            interface_msg += f"{num}. : {figure}\n"     # !TODO handle select
+        interface_msg += "0. EXIT : leave game\n"
+
         print(interface_msg)
 
     def handle_exit_command(self):
@@ -419,6 +483,14 @@ class ClientDGA:
     def send_start_msg(self):
         tlv = add_tlv_tag(TLV_START_MSG, "-")
         sendTlv(self.sock, tlv)
+
+    def reset_vars(self):
+        """ For the debug purpose reset all variables to init values """
+        self.current_msg = None
+        self.skip_turn = False
+        self.player_options = {}
+        self.option_chosen = None
+
 
 
 if __name__ == "__main__":

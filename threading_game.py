@@ -59,33 +59,37 @@ class GameThread(threading.Thread):
                     self.snd_player_status(player)
 
                     roll = self.wait_dice_message()
+                    # refactoring
+                    if self.skip_turn:  # player cannot move
+                        continue
+                    # -----------------
                     print("Player {} rolled {}".format(self.current_player.name, roll))
                     player_wants_place_figure = self.wait_want_place_figure()
                     if player_wants_place_figure:
-                        print("Player {} chose to place figure: {}".format(self.current_player.name, self.place_figure))
+                        print("Player {} chose to PLACE figure: {}".format(self.current_player.name, self.place_figure))
                     else:
-                        print("Player {} chose to move figure: {}".format(self.current_player.name, self.move_figure))
+                        print("Player {} chose to MOVE figure: {}".format(self.current_player.name, self.move_figure))
 
-                    if player.has_figures_on_board(self.game.game_board):
-                        print("Player {} has figures on board".format(player.name))
-                        if roll == 6 and len(player.start_figures) != 0:
-                            if player_wants_place_figure:
-                                print("Player {} wants to place new figure".format(player.name))                        
-                                player.place_figure(self.game.game_board)
-                            else:
-                                print("Player {} wants to move figure {}".format(player.name, self.move_figure))
-                                player.move_figure(self.game.game_board, roll, self.move_figure)
+                    # if player.has_figures_on_board(self.game.game_board):
+                    # print("Player {} has figures on board".format(player.name))
+                    if roll == 6 and len(player.start_figures) != 0:
+                        if player_wants_place_figure:
+                            print("Player {} wants to place new figure".format(player.name))
+                            player.place_figure(self.game.game_board)
                         else:
                             print("Player {} wants to move figure {}".format(player.name, self.move_figure))
                             player.move_figure(self.game.game_board, roll, self.move_figure)
+                    else:
+                        print("Player {} wants to move figure {}".format(player.name, self.move_figure))
+                        player.move_figure(self.game.game_board, roll, self.move_figure)
 
                     # player has no figure on board
-                    else:
-                        # three chances to roll a 6
-                        print("Player {} has no figures".format(player.name))
-                        for i in range(3):
-                            if self.game.try_place_figure(player):
-                                break
+                    # else:
+                    #     # three chances to roll a 6
+                    #     print("Player {} has no figures".format(player.name))
+                    #     for i in range(3):
+                    #         if self.game.try_place_figure(player):
+                    #             break
                             
                 if(self.game.is_player_winner(player)):
                     logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
@@ -104,11 +108,13 @@ class GameThread(threading.Thread):
             print("[ERROR] Unknown tag received: {}".format(e))
 
     def wait_want_place_figure(self):
+        print("Wait for place figure")
         while self.running:
             self.wait_for_message()
             if self.place_figure is not None:
+                print("Place figure: true")
                 return True
-
+            print("Place figure: false")
             if self.move_figure is not None:
                 return False
 
@@ -133,7 +139,7 @@ class GameThread(threading.Thread):
 
     def rcv_move_figure(self):
         self.move_figure = self.received_tlv[TLV_MOVEFIGURE_TAG]
-        print("move figure received with figure {}".format(self.place_figure))
+        print("move figure received with figure {}".format(self.move_figure))
 
     def rcv_rol_dice(self):
         print("rcv_rol_dice invoked")
@@ -143,7 +149,13 @@ class GameThread(threading.Thread):
         print("rcv roll dice response to {}".format(self.current_player.name))
         connection_index = self.player_name_to_connection[self.current_player.name]
         print("rcv roll dice connection index is {}".format(connection_index))
-        self.connections[connection_index].snd_ack_notification(TLV_ROLLDICERESULT_TAG, str(self.roll))
+        # self.connections[connection_index].snd_ack_notification(TLV_ROLLDICERESULT_TAG, str(self.roll))
+
+        # refactoring
+        tags_dict = self.get_roll_options_dict(self.roll, self.current_player)
+        tags_dict[TLV_ROLLDICERESULT_TAG] = str(self.roll)
+        self.connections[connection_index].snd_ack_dict_notification(tags_dict) # OK, ROLLDICERESULT, and options
+
         #for conn in self.connections:
         #    conn.snd_ack_notification(TLV_ROLLDICERESULT_TAG, str(self.roll))
 
@@ -207,7 +219,7 @@ class GameThread(threading.Thread):
         else:
             print("[GAME] Special msg")
         self.received_tlv = recvTlv(sock)
-        print(self.received_tlv)
+        # print(self.received_tlv)
         msg_types = get_types(self.received_tlv)
         for type in msg_types:
             try:
@@ -215,4 +227,27 @@ class GameThread(threading.Thread):
             except KeyError as e:
                 print("[ERROR] cannot parse {}: {}".format(type, e))
 
-    
+    def get_roll_options_dict(self, roll, player):
+        """
+        Based on roll and player game state returns dictionary of tags, that indicate
+        player possible options. Values are the player figures associated with options.
+        If option is SKIP then value is negligible.
+        @param roll:        (int)       : d6 roll number
+        @param player:      (Player)    : player instance
+        @return:            (dict)      : option: figures
+        """
+        msg_tags = {}
+        self.skip_turn = False
+        if roll == 6:
+            if player.has_figures_on_board(self.game.game_board):
+                msg_tags[TLV_OPTION_MOVE] = player.get_figures_on_board()
+            if player.has_starting_figure():
+                msg_tags[TLV_OPTION_PUT] = player.get_starting_figures()
+        else:
+            if player.has_figures_on_board(self.game.game_board):
+                msg_tags[TLV_OPTION_MOVE] = player.get_figures_on_board()
+            else:
+                msg_tags[TLV_OPTION_SKIP] = "."
+                self.skip_turn = True
+
+        return msg_tags
