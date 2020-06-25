@@ -249,7 +249,10 @@ class ClientDGA:
             # client_logger.debug(f"Input: {msg}")
             client_logger.debug(f"figures: {str(figures)}")
             # client_logger.debug(f"true/false: {msg not in figures}")
-            if msg not in figures and msg != "0":
+            if msg == "0":
+                self.close()
+
+            if msg not in figures:
                 print("Input {} is invalid".format(msg))
                 continue
             figure = figures[msg]
