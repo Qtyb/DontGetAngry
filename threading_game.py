@@ -91,9 +91,10 @@ class GameThread(threading.Thread):
                     #         if self.game.try_place_figure(player):
                     #             break
                             
-                if(self.game.is_player_winner(player)):
-                    logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
-                    break
+                    if(self.game.is_player_winner(player)):
+                        logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
+                        self.running = False
+                        break
 
                 logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
                     reveal_name(player.start_figures), reveal_name(player.finished_figures)))
