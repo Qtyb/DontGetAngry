@@ -1,16 +1,11 @@
-import errno
 # from socket import socket, AF_INET, SOCK_STREAM, timeout, error
-import time
 from common import *
-from random import randint
-from exceptions import *
 import signal
 import sys
 import select
 import threading
 import queue
 import os
-from pytlv.TLV import *
 from game.logger_conf import client_logger
 
 
@@ -144,6 +139,7 @@ class ClientDGA:
             raise Exception()
         except KeyboardInterrupt:
             client_logger.warning("Keyboard interrupt")
+            print("Closing...\n")
             self.running = False
             self.close()
         except (OSError, EOFError) as e:
@@ -177,15 +173,16 @@ class ClientDGA:
                 # print("Message {} is a request from the server".format(server_ans))
                 self.handle_answer(server_ans)      # received msg is not a control msg
             except (OSError, EOFError) as e:
+                print("\nServer error\n")
                 client_logger.error("Error while reading data: " + str(e))
                 os.kill(os.getpid(), signal.SIGINT)     # should raise Keyboard interrupt in the main thread
                 event.set()  # alarm main thread that program should exit
                 return
-            # except Exception as e:
-            #     client_logger.error("Other error while reading data: " + str(e))
-            #     os.kill(os.getpid(), signal.SIGINT)
-            #     event.set()  # alarm main thread that program should exit
-            #     return
+            except Exception as e:
+                client_logger.error("Other error while reading data: " + str(e))
+                os.kill(os.getpid(), signal.SIGINT)
+                event.set()  # alarm main thread that program should exit
+                return
 
     def handle_answer(self, ans):
         """
@@ -486,7 +483,6 @@ class ClientDGA:
         self.option_chosen = None
 
 
-
 if __name__ == "__main__":
     # remote server address
     LOOPBACK = '127.0.0.1'
@@ -505,6 +501,13 @@ if __name__ == "__main__":
         port = int(port)
 
     elif len(sys.argv) == 2:
+        if sys.argv[1] in ["-h", "--help", "-help", "?"]:
+            print("""
+            Usage: python3 client.py [address] [port]
+            Default address: {}
+            Default port: {}
+            """.format(LOOPBACK, PORT))
+            sys.exit()
         addr = sys.argv[1]
 
     cli = ClientDGA()
