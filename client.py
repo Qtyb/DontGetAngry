@@ -72,6 +72,7 @@ class ClientDGA:
         try:
             self.sock.connect((addr, port))
         except OSError as e:
+            print("Cannot connect to the server: {}".format(str(e)))
             client_logger.error("connect error: {}".format(str(e)))
             sys.exit()
 
@@ -173,18 +174,18 @@ class ClientDGA:
                     self.pipeline.put(server_ans)
                     continue
                 
-                print("Message {} is a request from the server".format(server_ans))
+                # print("Message {} is a request from the server".format(server_ans))
                 self.handle_answer(server_ans)      # received msg is not a control msg
             except (OSError, EOFError) as e:
                 client_logger.error("Error while reading data: " + str(e))
                 os.kill(os.getpid(), signal.SIGINT)     # should raise Keyboard interrupt in the main thread
                 event.set()  # alarm main thread that program should exit
                 return
-            except Exception as e:
-                client_logger.error("Other error while reading data: " + str(e))
-                os.kill(os.getpid(), signal.SIGINT)
-                event.set()  # alarm main thread that program should exit
-                return
+            # except Exception as e:
+            #     client_logger.error("Other error while reading data: " + str(e))
+            #     os.kill(os.getpid(), signal.SIGINT)
+            #     event.set()  # alarm main thread that program should exit
+            #     return
 
     def handle_answer(self, ans):
         """
@@ -192,25 +193,23 @@ class ClientDGA:
         just print received information.
         ans     (dict)  : TLV: str
         """
-        #print("Handle answer invoked")
 
         if TLV_STARTED_TAG in ans:
-            print("Game started tag received")
-            print("Press enter to start a game")
+            client_logger.debug("Game started tag received")
+            # print("Press enter to start a game")
             self.game_started = True
 
         if TLV_FINISHED_TAG in ans:
             self.game_started = False
 
-        if TLV_INFO_TAG in ans:
+        if TLV_INFO_TAG in ans:     # information message -> print it
             print("\n" + remove_tlv_padding(ans[TLV_INFO_TAG]))
 
-        #TODO remove
         if TLV_MOVEORPLACE_TAG in ans:
-            print("TLV_MOVEORPLACE_TAG received")
+            client_logger.debug("TLV_MOVEORPLACE_TAG received")
 
         if TLV_ROLLDICERESULT_TAG in ans:
-            print("Roll dice result tag received")
+            client_logger.debug("Roll dice result tag received")
             self.game_roll = ans[TLV_ROLLDICERESULT_TAG]
             self.game_rolled = True
 
@@ -272,19 +271,14 @@ class ClientDGA:
             tlv_tag: figure
         }
 
-        print("Place or Move command options chosen {}".format(data_dict))
+        client_logger.debug("Place or Move command options chosen {}".format(data_dict))
         tlv = build_tlv_with_tags(data_dict)
         sendTlv(self.sock, tlv)
-        
-        """server_ans = recvTlv(self.sock)        # maybe each header of server response should contain OK/FAIL
-        if TLV_OK_TAG in server_ans:
-            print(server_ans[TLV_OK_TAG])
-            break"""
     
     def send_roll_command(self):
         """Send roll dice command to the server and anticipate positive response with roll result"""
         while True:
-            print("Sending roll command")
+            client_logger.debug("Sending roll command")
             tlv = add_tlv_tag(TLV_ROLLDICE_TAG, self.nickname)
             sendTlv(self.sock, tlv)
 
@@ -296,12 +290,11 @@ class ClientDGA:
                     return
                 self.player_options = option_parsing(self.current_msg)
                 return
-                # return self.current_msg[TLV_ROLLDICERESULT_TAG]
             else:
                 if TLV_FAIL_TAG in self.current_msg:
                     print(self.current_msg[TLV_FAIL_TAG])       # print error message
-                
-                print("Message did not have {}".format(TLV_ROLLDICERESULT_TAG))
+
+                client_logger.warning("Message did not have {}".format(TLV_ROLLDICERESULT_TAG))
 
     def set_nickname(self):
         """Send nickname to the sever and anticipate positive response"""
@@ -362,9 +355,7 @@ class ClientDGA:
         """
         msg = self.pipeline.get()       # blocks here
         self.current_msg = msg          # msg can be read from outside of this method while it returns control information
-        # if msg is None:       # !TODO check if it can occur
-        #     return False
-        # print("MSG:   " + str(msg))
+
         if TLV_OK_TAG in msg:
             client_logger.debug("Received OK_TAG")
             return True
@@ -408,15 +399,15 @@ class ClientDGA:
 
     def handle_ingame_options_input(self, msg):
         if msg.upper().strip() in [options_mapping[TLV_OPTION_PUT], "PLACE_FIGURE"]:
-            print("PLACE FIGURE CHOSEN")
+            client_logger.debug("PLACE FIGURE CHOSEN")
             return TLV_PLACEFIGURE_TAG
 
         elif msg.upper().strip() in [options_mapping[TLV_OPTION_MOVE], "MOVE_FIGURE"]:
-            print("MOVE FIGURE CHOSEN")
+            client_logger.debug("MOVE FIGURE CHOSEN")
             return TLV_MOVEFIGURE_TAG
 
         elif msg.upper().strip() in ["0", "EXIT"]:
-            print("EXIT CHOSEN")
+            client_logger.debug("EXIT CHOSEN")
             self.handle_exit_command()
 
     def print_ingame_options(self):
@@ -509,7 +500,7 @@ if __name__ == "__main__":
         port = sys.argv[2]
 
         if not is_valid_port(port):
-            client_logger.error(f"Wrong port: {port}")
+            print(f"Wrong port: {port}")
             sys.exit(1)
         port = int(port)
 

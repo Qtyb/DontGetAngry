@@ -56,8 +56,6 @@ class Room:
         game.start()
         return True
 
-
-
     def __len__(self):
         return len(self.room_members)
 
@@ -66,7 +64,6 @@ class Room:
 
 
 class RoomManager:
-    # !TODO setitem, getitem
 
     class __RoomManager:
         def __init__(self):     # init() is not a constructor
@@ -92,7 +89,7 @@ class RoomManager:
                     server_logger.info("Room {} is full".format(rnum))
                     return False
 
-            # if room of number rnum doesn't exist create a new one
+            # if room with number rnum doesn't exist, create a new one
             else:
                 self.create_room(conn, rnum)     # join call create
                 return True
@@ -158,10 +155,6 @@ class RoomManager:
                 msg += "\n"
 
             return msg
-
-        # creates multiple instances - why?
-        # def __len__(self):
-        #     return len(self.rooms)
 
         def __str__(self):
             return self.get_rooms_description()

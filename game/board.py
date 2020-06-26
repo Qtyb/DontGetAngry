@@ -49,18 +49,20 @@ class Board:
     def display_board(self):
         board_view = "\n"
         #print("Display board: " + str(self.fields))
-        for f in self.fields:
-            if isinstance(f, Figure):
-                f = str(f)
-            else:
-                f += '0'
-                
-            board_view += "|{}".format(f)
-        board_view += "|\n"
+        # for f in self.fields:
+        #     if isinstance(f, Figure):
+        #         f = str(f)
+        #     else:
+        #         f += '0'
+        #
+        #     board_view += "|{}".format(f)
+        # board_view += "|\n"
         
         i = 0
         for f in self.fields:
-            if i < 10:
+            if isinstance(f, Figure):
+                board_view += "|{}".format(str(f))
+            elif i < 10:
                 board_view += "|0{}".format(i)
             else:
                 board_view += "|{}".format(i)

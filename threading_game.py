@@ -3,7 +3,7 @@ import select
 from settings import *
 from common import *
 from game.game import Game
-from game.logger_conf import logger, reveal_name
+from game.logger_conf import logger, reveal_name, game_logger
 
 
 NROLLS = 3
@@ -40,7 +40,7 @@ class GameThread(threading.Thread):
             self.player_name_to_connection[i.cli.name] = index
             index += 1
 
-        print("player_names: {}".format(player_names))
+        game_logger.debug("player_names: {}".format(player_names))
         self.game = Game(player_names, 24) #Board should scale but will not, because it is not important :)
         # print(self.game.game_board.display_board())
 
@@ -74,48 +74,38 @@ class GameThread(threading.Thread):
                     # print("Player {} has figures on board".format(player.name))
                     if roll == 6 and len(player.start_figures) != 0:
                         if player_wants_place_figure:
-                            print("Player {} wants to place new figure".format(player.name))
+                            game_logger.debug("Player {} wants to place new figure".format(player.name))
                             player.place_figure(self.game.game_board)
                         else:
-                            print("Player {} wants to move figure {}".format(player.name, self.move_figure))
+                            game_logger.debug("Player {} wants to move figure {}".format(player.name, self.move_figure))
                             player.move_figure(self.game.game_board, roll, self.move_figure)
                     else:
-                        print("Player {} wants to move figure {}".format(player.name, self.move_figure))
+                        game_logger.debug("Player {} wants to move figure {}".format(player.name, self.move_figure))
                         player.move_figure(self.game.game_board, roll, self.move_figure)
-
-                    # player has no figure on board
-                    # else:
-                    #     # three chances to roll a 6
-                    #     print("Player {} has no figures".format(player.name))
-                    #     for i in range(3):
-                    #         if self.game.try_place_figure(player):
-                    #             break
                             
-                    if(self.game.is_player_winner(player)):
-                        logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
+                    if self.game.is_player_winner(player):
+                        game_logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
                         self.running = False
                         break
 
-                logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
+                game_logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
                     reveal_name(player.start_figures), reveal_name(player.finished_figures)))
                 # debug output of board fields
-                logger.debug("Board fields after turn: {}".format(reveal_name(self.game.game_board.fields)))
+                game_logger.debug("Board fields after turn: {}".format(reveal_name(self.game.game_board.fields)))
 
         except (EOFError, OSError) as e:
-            print("[ERROR-GAME] Error while handling message: ", str(e))
+            game_logger.error("[ERROR-GAME] Error while handling message: ", str(e))
             self.close_all()
             return
         except ValueError as e:
-            print("[ERROR] Unknown tag received: {}".format(e))
+            game_logger.error("[ERROR] Unknown tag received: {}".format(e))
 
     def wait_want_place_figure(self):
-        print("Wait for place figure")
+        game_logger.debug("Wait for place figure")
         while self.running:
             self.wait_for_message()
             if self.place_figure is not None:
-                print("Place figure: true")
                 return True
-            print("Place figure: false")
             if self.move_figure is not None:
                 return False
 
@@ -136,36 +126,26 @@ class GameThread(threading.Thread):
 
     def rcv_place_figure(self):
         self.place_figure = self.received_tlv[TLV_PLACEFIGURE_TAG]
-        print("place figure received with data {}".format(self.place_figure))
+        game_logger.debug("place figure received with data {}".format(self.place_figure))
 
     def rcv_move_figure(self):
         self.move_figure = self.received_tlv[TLV_MOVEFIGURE_TAG]
-        print("move figure received with figure {}".format(self.move_figure))
+        game_logger.debug("move figure received with figure {}".format(self.move_figure))
 
     def rcv_rol_dice(self):
-        print("rcv_rol_dice invoked")
         self.roll = self.game.roll_d6()
-        print("player roll: {}".format(self.roll))
+        game_logger.debug("player roll: {}".format(self.roll))
 
-        print("rcv roll dice response to {}".format(self.current_player.name))
         connection_index = self.player_name_to_connection[self.current_player.name]
-        print("rcv roll dice connection index is {}".format(connection_index))
-        # self.connections[connection_index].snd_ack_notification(TLV_ROLLDICERESULT_TAG, str(self.roll))
 
         # refactoring
         tags_dict = self.get_roll_options_dict(self.roll, self.current_player)
         tags_dict[TLV_ROLLDICERESULT_TAG] = str(self.roll)
         self.connections[connection_index].snd_ack_dict_notification(tags_dict) # OK, ROLLDICERESULT, and options
 
-        #for conn in self.connections:
-        #    conn.snd_ack_notification(TLV_ROLLDICERESULT_TAG, str(self.roll))
-
-        #self.send(self.player_name_to_connection[self.current_player.name].sock, TLV_ROLLDICERESULT_TAG, str(self.roll))
-        # update game status
-
     def snd_msg_to_all(self, msg):
         """Send message to all connected players"""
-        print("[SEND ALL] msg: {}".format(msg))
+        game_logger.debug("Send msg to all: {}".format(msg))
         for conn in self.connections:
             tlv = add_tlv_tag(TLV_INFO_TAG, msg)
             sendTlv(conn.sock, tlv)
@@ -173,7 +153,7 @@ class GameThread(threading.Thread):
     def snd_player_status(self, player):
         conn = self.connections[self.player_name_to_connection[player.name]]
         conn.snd_notification(TLV_INFO_TAG, self.game.get_player_status(player))
-        logger.debug("Send player status notification")
+        game_logger.debug("Send player status notification")
 
     def get_game_status(self):
         running = "YES" if self.running else "NO"
@@ -183,18 +163,16 @@ class GameThread(threading.Thread):
             """.format(running, self.nplayers)
         return msg
 
-    def close_all(self):  # !TODO clear room
+    def close_all(self):
         """Close all the sockets"""
-        print(self.connections)
-
-        # conns = self.connections        # manager removes connections from room
-        for conn in self.connections:       # !TODO wtf
+        for conn in self.connections:
+            game_logger.info("Close connection {}".format(conn))
             conn.sock.close()
         conn = self.connections[0]
         conn.room_manager.close_room(conn.cli.rnum)
 
     def send_new_turn_started(self, player_name):
-        print("send_new_turn_started for player {}".format(player_name))
+        game_logger.debug("send_new_turn_started for player {}".format(player_name))
         for conn in self.connections:
             conn.snd_notification(TLV_NEWTURN_TAG, player_name) #{}\n".format(self.game.game_board.display_board()))
 
@@ -212,13 +190,12 @@ class GameThread(threading.Thread):
         """Send message that contains control message"""
         tlv = add_tlv_tag(tag, msg)
         sendTlv(sock, tlv)
-        # print("message has been sent")
 
     def handle_msg(self, sock):
         if self.connections[self.next_player].sock == sock:
-            print("[GAME] player {} move".format(self.next_player))
+            game_logger.debug("Player {} move".format(self.next_player))
         else:
-            print("[GAME] Special msg")
+            game_logger.debug("Special msg received")
         self.received_tlv = recvTlv(sock)
         # print(self.received_tlv)
         msg_types = get_types(self.received_tlv)
@@ -226,7 +203,7 @@ class GameThread(threading.Thread):
             try:
                 self.msg_handlers[type]()
             except KeyError as e:
-                print("[ERROR] cannot parse {}: {}".format(type, e))
+                game_logger.error("[ERROR] cannot parse {}: {}".format(type, e))
 
     def get_roll_options_dict(self, roll, player):
         """

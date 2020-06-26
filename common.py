@@ -1,4 +1,5 @@
 from settings import LENGTH_LEN, PADDING_CHAR, LIST_DELIMITER
+from game.logger_conf import network_logger
 from pytlv.TLV import *
 import socket
 
@@ -38,10 +39,9 @@ def create_msg(msg):
     data_len = len(msg) if msg is not None else 0
     header_len = 10
     header = f"{data_len :< {header_len}}"
-    # print("header: " + header)
-    msg_enc = msg.encode("utf-8")
+    # msg_enc = msg.encode("utf-8")
     created_msg = header + msg
-    #print("created message: ", created_msg)
+    network_logger.debug("created message: " + created_msg)
     return created_msg
 
 def sendText(sock, msg):
@@ -62,7 +62,7 @@ def recvall(sock, n):
         try:
             chunk = sock.recv(n - len(msg))
         except BlockingIOError:
-            print("BlockingIO Exception")
+            network_logger.error("BlockingIO Exception")
             return b""
         if not chunk:
             raise EOFError("socket closed while reading data")
@@ -71,13 +71,10 @@ def recvall(sock, n):
     return msg
 
 def recvText(sock):
-    # msg_type = recvall(sock, TYPE_LEN).decode("utf-8")
-    # TODO handle different types of msgs
-    # try:
-    msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
+    msg_len = (recvall(sock, LENGTH_LEN).decode("utf-8"))
+    network_logger.debug("msg len: " + msg_len)
+    msg_len = int(msg_len)
     return recvall(sock, msg_len).decode("utf-8")
-    # except EOFError:
-    #     print("[WARNING] Client closed connection")
 
 
 # TLV functions
@@ -114,34 +111,34 @@ def add_tlv_tag(tag, msg, tlv = None):
 def build_tlv_with_tags(data_dict):
     tlv = create_tlv()
 
-    #print("Build tlv with dictionary: {}".format(data_dict))
     parsed_dict = {}
     for tag, value in data_dict.items():
         if isinstance(value, list):
             value = serialize_list(value)
         parsed_dict[tag] = add_tlv_padding(value)
 
-    #print("Build tlv with dictionary after padding: {}".format(parsed_dict))
+    network_logger.debug("Build tlv with dictionary after padding: {}".format(parsed_dict))
     
     tlv.build(parsed_dict)
     return tlv
 
 def sendTlv(sock, tlv):
     message_to_send = tlv.tlv_string
-    #print("Sending TLV:", message_to_send)
+    network_logger.debug("Sending TLV: " + message_to_send)
 
     sendText(sock, create_msg(message_to_send))  
 
 def recvTlv(sock):      # !TODO handle EOFError
-    msg_len = int(recvall(sock, LENGTH_LEN).decode("utf-8"))
+    msg_len = (recvall(sock, LENGTH_LEN).decode("utf-8"))
+    network_logger.debug("msg len: " + msg_len)
+    msg_len = int(msg_len)
     msg = recvall(sock, msg_len).decode("utf-8")
     tlv = create_tlv()
-    #print("recvTlv msg: ", msg)
+    network_logger.debug("recvTlv msg: " + msg)
     parsed_msg = tlv.parse(msg)
     for key, value in parsed_msg.items():
         parsed_msg[key] = remove_tlv_padding(value)
 
-    #print("parsed recvTLV: ", parsed_msg)
     return parsed_msg
 
 def get_types(tlv_msg):
@@ -163,7 +160,7 @@ def is_ipv4(addr):
     return True
 
 
-def is_ipv6( addr):
+def is_ipv6(addr):
     """ Checks if address is ipv6 """
     try:
         socket.inet_pton(socket.AF_INET6, addr)
@@ -179,10 +176,10 @@ def is_valid_port(port):
 
 
 def serialize_list(l):
-    """ list -> string (PADDING_CHAR) delimiter"""
+    """ list -> string (PADDING_CHAR delimiter)"""
     return f"{LIST_DELIMITER}".join(l)
 
 
 def deserialize_list(string):
-    """ string -> list PADDING_CHAR) split"""
+    """ string -> list (PADDING_CHAR split)"""
     return string.split(LIST_DELIMITER)

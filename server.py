@@ -5,7 +5,7 @@ from settings import *
 import select
 from exceptions import *
 from rooms import RoomManager
-from game.logger_conf import server_logger
+from game.logger_conf import server_logger, server_fh, game_fh, network_fh
 import daemon
 
 
@@ -293,5 +293,5 @@ if __name__ == "__main__":
     elif len(sys.argv) == 2:
         addr = sys.argv[1]
 
-    # with daemon.DaemonContext():
-    serverDGA = DontGetAngryServer(addr, port)
+    with daemon.DaemonContext(files_preserve=[server_fh, game_fh, network_fh]):
+        serverDGA = DontGetAngryServer(addr, port)
