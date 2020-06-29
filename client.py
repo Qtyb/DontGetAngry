@@ -505,12 +505,10 @@ if __name__ == "__main__":
         addr = sys.argv[1]
         port = sys.argv[2]
 
-        if not is_valid_port(port):
+        if not is_valid_port(port):     # checks if port is int and in scope of valid port numbers
             print(f"Wrong port: {port}")
             sys.exit(1)
-        else:
-            print("Wrong port number!")
-            sys.exit(-1)
+        port = int(port)
 
     elif len(sys.argv) == 2:
         if sys.argv[1] in ["-h", "--help", "-help", "?"]:
