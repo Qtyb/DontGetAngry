@@ -33,8 +33,8 @@ class Game:
             # move figure
             #player.move_figure(self.game_board, self.roll)
             logger.info("Player {} placed new figure".format(player.name))
-            return True;
-        return False;
+            return True
+        return False
 
     def start_player_turn(self, player):
         player.turns += 1

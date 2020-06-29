@@ -85,11 +85,12 @@ class GameThread(threading.Thread):
                             
                     if self.game.is_player_winner(player):
                         game_logger.info("Player {} won the game after {} turns!".format(player.name, player.turns))
+                        self.snd_msg_to_all(f"Game ended.\nPlayer {player.name} won after {player.turns} turns.\n")
+                        self.close_all()
                         self.running = False
-                        break
 
-                game_logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
-                    reveal_name(player.start_figures), reveal_name(player.finished_figures)))
+                    game_logger.debug("Player data after turn: start figures: {}, finished figures: {}".format(
+                        reveal_name(player.start_figures), reveal_name(player.finished_figures)))
                 # debug output of board fields
                 game_logger.debug("Board fields after turn: {}".format(reveal_name(self.game.game_board.fields)))
 
@@ -174,7 +175,7 @@ class GameThread(threading.Thread):
     def send_new_turn_started(self, player_name):
         game_logger.debug("send_new_turn_started for player {}".format(player_name))
         for conn in self.connections:
-            conn.snd_notification(TLV_NEWTURN_TAG, player_name) #{}\n".format(self.game.game_board.display_board()))
+            conn.snd_notification(TLV_NEWTURN_TAG, player_name)  #{}\n".format(self.game.game_board.display_board()))
 
     def send_game_started(self):
         for conn in self.connections:

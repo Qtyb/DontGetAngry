@@ -70,16 +70,23 @@ class ClientDGA:
         @return:        (None)
         """
         try:
+            self.sock.settimeout(CONNECT_TIMEOUT)
             if self.is_ipv6:
-                self.sock.settimeout(CONNECT_TIMEOUT)
                 self.sock.connect((addr, port, 0, 0))
-                self.sock.settimeout(None)
             else:
                 self.sock.connect((addr, port))
+            self.sock.settimeout(None)
         except OSError as e:
             print("Cannot connect to the server: {}".format(str(e)))
             client_logger.error("connect error: {}".format(str(e)))
-            sys.exit()
+            self.close()
+        except KeyboardInterrupt as e:
+            client_logger.error("keyboard interrupt while connecting: {}".format(str(e)))
+            self.close()
+        except Exception as e:
+            print("Error while connecting: {}".format(str(e)))
+            client_logger.error("connect other error: {}".format(str(e)))
+            self.close()
 
     def close(self):
         """
