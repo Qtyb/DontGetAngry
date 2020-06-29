@@ -170,9 +170,12 @@ def is_ipv6(addr):
 
 
 def is_valid_port(port):
-    if 0 < int(port) < 65536:
-        return True
-    return False
+    try:
+        if 0 < int(port) < 65536:
+            return True
+        return False
+    except ValueError:
+        return False
 
 
 def serialize_list(l):

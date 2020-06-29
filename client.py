@@ -6,6 +6,7 @@ import select
 import threading
 import queue
 import os
+from settings import CONNECT_TIMEOUT
 from game.logger_conf import client_logger
 
 
@@ -35,8 +36,9 @@ def flush_input():
 
 class ClientDGA:
 
-    def __init__(self):
+    def __init__(self, is_ipv6=False):
         self.sock = None
+        self.is_ipv6 = is_ipv6
         self.running = False
         self.nickname = ""
         self.game_started = False
@@ -53,7 +55,10 @@ class ClientDGA:
 
     def init(self):
         try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if self.is_ipv6:
+                self.sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            else:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         except OSError as e:
             client_logger.error("socket error: {}".format(str(e)))
 
@@ -65,7 +70,12 @@ class ClientDGA:
         @return:        (None)
         """
         try:
-            self.sock.connect((addr, port))
+            if self.is_ipv6:
+                self.sock.settimeout(CONNECT_TIMEOUT)
+                self.sock.connect((addr, port, 0, 0))
+                self.sock.settimeout(None)
+            else:
+                self.sock.connect((addr, port))
         except OSError as e:
             print("Cannot connect to the server: {}".format(str(e)))
             client_logger.error("connect error: {}".format(str(e)))
@@ -498,7 +508,9 @@ if __name__ == "__main__":
         if not is_valid_port(port):
             print(f"Wrong port: {port}")
             sys.exit(1)
-        port = int(port)
+        else:
+            print("Wrong port number!")
+            sys.exit(-1)
 
     elif len(sys.argv) == 2:
         if sys.argv[1] in ["-h", "--help", "-help", "?"]:
@@ -510,7 +522,8 @@ if __name__ == "__main__":
             sys.exit()
         addr = sys.argv[1]
 
-    cli = ClientDGA()
+    is_ipv6 = is_ipv6(addr)
+    cli = ClientDGA(is_ipv6)
     cli.init()
     cli.connect(addr, port)
     cli.run()

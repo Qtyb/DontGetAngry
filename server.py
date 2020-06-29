@@ -34,6 +34,7 @@ class DontGetAngryServer:
         if self.HOST == "":
             family = socket.AF_INET6
         elif is_ipv4(self.HOST):
+
             family = socket.AF_INET
         elif is_ipv6(self.HOST):
             family = socket.AF_INET6
@@ -42,6 +43,7 @@ class DontGetAngryServer:
             sys.exit(1)
 
         try:
+            server_logger.info(f"Create socket with family {str(family)}")
             self.srv_socket = socket.socket(family, socket.SOCK_STREAM)
             self.srv_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.srv_socket.setblocking(False)
